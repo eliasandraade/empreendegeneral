@@ -1,3 +1,6 @@
+// Página dinâmica — depende de dados do banco em runtime
+export const dynamic = "force-dynamic"
+
 import Link from "next/link"
 import { Search, MapPin, ArrowRight } from "lucide-react"
 import { prisma } from "@/lib/prisma"
