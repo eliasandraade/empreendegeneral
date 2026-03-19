@@ -6,7 +6,8 @@
       "Read(//tmp/**)",
       "Bash(cp:*)",
       "Bash(rsync -a --exclude='node_modules' --exclude='.git' /tmp/empreende-tmp/ /c/Users/Elias/Documents/Prefeitura/empreende-general/)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(openssl rand:*)"
     ]
   }
 }
