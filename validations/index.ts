@@ -19,11 +19,11 @@ export const createBusinessSchema = z.object({
   hours: z.string().max(200).optional(),
   formattedAddress: z.string().max(300).optional(),
   latitude: z.coerce
-    .number({ invalid_type_error: "Localização obrigatória" })
+    .number({ error: "Localização obrigatória" })
     .min(-90)
     .max(90),
   longitude: z.coerce
-    .number({ invalid_type_error: "Localização obrigatória" })
+    .number({ error: "Localização obrigatória" })
     .min(-180)
     .max(180),
 })
