@@ -1,31 +1,32 @@
 import {
-  UtensilsCrossed,
-  ShoppingBasket,
+  Utensils,
   Scissors,
-  Store,
-  Shirt,
-  Sparkles,
-  Hammer,
-  Package,
+  ShoppingBag,
+  Wrench,
+  Sprout,
+  Cross,
+  MapPin,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-const iconMap: Record<string, LucideIcon> = {
-  UtensilsCrossed,
-  ShoppingBasket,
-  Scissors,
-  Store,
-  Shirt,
-  Sparkles,
-  Hammer,
+// Mapeia slug de categoria → ícone Lucide
+const ICON_MAP: Record<string, LucideIcon> = {
+  alimentacao: Utensils,
+  beleza:      Scissors,
+  comercio:    ShoppingBag,
+  servicos:    Wrench,
+  agro:        Sprout,
+  saude:       Cross,
+  default:     MapPin,
 }
 
 interface CategoryIconProps {
-  name: string | null
+  slug: string | null | undefined
   size?: number
+  className?: string
 }
 
-export function CategoryIcon({ name, size = 22 }: CategoryIconProps) {
-  const Icon = (name && iconMap[name]) ? iconMap[name] : Package
-  return <Icon size={size} />
+export function CategoryIcon({ slug, size = 22, className }: CategoryIconProps) {
+  const Icon = (slug && ICON_MAP[slug]) ? ICON_MAP[slug] : ICON_MAP.default
+  return <Icon size={size} className={className} aria-hidden="true" />
 }
