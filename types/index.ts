@@ -54,3 +54,24 @@ export type BusinessSearchParams = {
 }
 
 export type { UserRole, BusinessStatus }
+
+// Dados de localização retornados pelo geocoder
+export type LocationData = {
+  latitude: number
+  longitude: number
+  formattedAddress: string
+}
+
+// Pin de negócio para exibição no mapa
+export type BusinessMapPin = {
+  id: string
+  name: string
+  slug: string
+  latitude: number
+  longitude: number
+  featured: boolean
+  phone: string | null
+  whatsapp: string | null
+  address: string | null
+  category: { name: string; slug: string; icon: string | null } | null
+}
