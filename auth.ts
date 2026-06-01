@@ -18,7 +18,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    // Injeta role e id do usuário no token JWT
+    // Promove usuário a SUPER_ADMIN se o e-mail estiver em ADMIN_EMAILS
+    async signIn({ user }) {
+      if (!user?.email) return true
+
+      const adminEmails = (process.env.ADMIN_EMAILS ?? "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean)
+
+      if (adminEmails.includes(user.email.toLowerCase())) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email },
+          select: { id: true, role: true },
+        })
+        if (dbUser && dbUser.role !== "SUPER_ADMIN") {
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: { role: "SUPER_ADMIN" },
+          })
+        }
+      }
+
+      return true
+    },
+    // Injeta role e id do usuário na sessão
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id
