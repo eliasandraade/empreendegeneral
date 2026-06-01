@@ -24,6 +24,7 @@ export default function MapCanvas({ businesses, categories, isAuthenticated, app
   const [locationError, setLocationError] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [zoomLevel, setZoomLevel] = useState<number>(14)
 
   const handleSelectBusiness = useCallback((pin: BusinessMapPin | null) => {
     setSelectedBusiness(pin)
@@ -53,6 +54,8 @@ export default function MapCanvas({ businesses, categories, isAuthenticated, app
         onSelectBusiness={handleSelectBusiness}
         categoryFilter={categoryFilter}
         searchQuery={searchQuery}
+        zoomLevel={zoomLevel}
+        onZoomChange={setZoomLevel}
       />
 
       <MapOverlayHeader
