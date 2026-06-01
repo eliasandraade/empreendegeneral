@@ -1,7 +1,6 @@
 // components/map/MapOverlayHeader.tsx
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
 import { Search, Plus, User, X } from "lucide-react"
 import type { Category } from "@prisma/client"
@@ -27,8 +26,6 @@ export function MapOverlayHeader({
   searchQuery,
   onSearchChange,
 }: Props) {
-  const [_searchFocused, setSearchFocused] = useState(false)
-
   return (
     <div className="absolute top-0 left-0 right-0 z-[500] pointer-events-none">
       <div className="h-48 bg-gradient-to-b from-black/40 to-transparent" />
@@ -65,8 +62,6 @@ export function MapOverlayHeader({
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
               placeholder="Buscar negócios na cidade..."
               className="flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
             />
