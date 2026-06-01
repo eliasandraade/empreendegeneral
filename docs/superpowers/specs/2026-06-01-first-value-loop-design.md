@@ -1,16 +1,16 @@
-# Design Spec — Primeiro Loop de Valor
+# Design Spec — Primeiro Loop de Valor (v2 — mapa-first)
 
-**Data:** 2026-06-01  
-**Sprint:** Login Google → Cadastro de Negócio → Aprovação Admin → Publicação  
-**Critério de sucesso:** Um usuário novo entra com Google, cadastra um negócio, o admin aprova, e o negócio aparece publicamente.
+**Data:** 2026-06-01 (revisado com mudança de produto mapa-first)
+**Sprint:** Login Google → Cadastro de Negócio → Aprovação Admin → Publicação no Mapa  
+**Critério de sucesso:** Um usuário novo entra com Google, cadastra um negócio com localização, o admin aprova, e o negócio aparece como pin no mapa público.
+
+**Conceito central:** "Mapa vivo da economia local" — ao abrir o app, o usuário vê o mapa de General Sampaio com os negócios como pontos vivos.
 
 ---
 
 ## 1. Alterações no Schema (Prisma)
 
 ### 1.1 Enum `UserRole`
-
-Adicionar `SUPER_ADMIN`:
 
 ```prisma
 enum UserRole {
@@ -21,9 +21,16 @@ enum UserRole {
 }
 ```
 
-### 1.2 Modelo `EntrepreneurProfile`
+### 1.2 Campos novos em `Business`
 
-Criado automaticamente quando o admin aprova o primeiro negócio de um usuário `USER`.
+```prisma
+rejectionReason String? @db.Text  // preenchido pelo admin ao rejeitar
+hours           String?           // horário de funcionamento em texto livre
+```
+
+### 1.3 Modelo `EntrepreneurProfile`
+
+Criado automaticamente quando o admin aprova o primeiro negócio de um `USER`.
 
 ```prisma
 model EntrepreneurProfile {
@@ -36,210 +43,303 @@ model EntrepreneurProfile {
 }
 ```
 
-Adicionar relação em `User`:
-```prisma
-entrepreneurProfile EntrepreneurProfile?
-```
-
-### 1.3 Campo `rejectionReason` em `Business`
-
-Adicionar campo opcional em `Business`:
-
-```prisma
-rejectionReason String? @db.Text
-```
-
-Preenchido por `rejectBusinessAction`. Exibido no dashboard do empreendedor quando `status === "REJECTED"`.
-
-### 1.4 Modelo `AdminAction` (log de ações admin)
+### 1.4 Modelo `AdminAction`
 
 Registro imutável de aprovações e rejeições.
 
 ```prisma
 model AdminAction {
-  id         String   @id @default(cuid())
-  adminId    String
-  admin      User     @relation(fields: [adminId], references: [id])
-  action     String   // "APPROVE_BUSINESS" | "REJECT_BUSINESS"
-  targetId   String   // businessId alvo
-  reason     String?  @db.Text
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String   // "APPROVE_BUSINESS" | "REJECT_BUSINESS"
+  targetId  String   // businessId alvo
+  reason    String?  @db.Text
+  createdAt DateTime @default(now())
 }
 ```
 
-Adicionar relação em `User`:
+Relações adicionadas em `User`:
 ```prisma
-adminActions AdminAction[]
+entrepreneurProfile EntrepreneurProfile?
+adminActions        AdminAction[]
 ```
 
 ---
 
 ## 2. Autenticação e Roles
 
-### 2.1 Variável de ambiente
+### 2.1 ADMIN_EMAILS
 
 ```env
 ADMIN_EMAILS=email1@example.com,email2@example.com
 ```
 
-### 2.2 Lógica no `auth.ts`
+### 2.2 Callback `signIn` em `auth.ts`
 
-No callback `signIn`, após o adapter criar/carregar o usuário:
-
-1. Ler `process.env.ADMIN_EMAILS`, split por vírgula, aplicar `.trim().toLowerCase()` em cada entrada.
+1. Split de `ADMIN_EMAILS` por vírgula, `.trim().toLowerCase()` em cada entrada.
 2. Comparar com `user.email?.toLowerCase()`.
-3. Se match **e** `user.role !== "SUPER_ADMIN"`: `prisma.user.update({ where: { id: user.id }, data: { role: "SUPER_ADMIN" } })`.
-4. O banco é a fonte de verdade a partir desse ponto — logins subsequentes não repetem o update.
+3. Se match e `user.role !== "SUPER_ADMIN"`: atualizar no banco para `SUPER_ADMIN`.
+4. O banco é a fonte de verdade — logins subsequentes não repetem o update.
 
-### 2.3 Sessão
+### 2.3 Página `/login`
 
-O callback `session` já injeta `id` e `role`. Nenhuma alteração necessária.
+Server Component. Form com `action` que chama `signIn("google")`. Redirect para `/dashboard` após login.
 
-### 2.4 Página `/login`
+### 2.4 Header
 
-Server Component. Contém apenas um form com `action` que chama `signIn("google")`. Após login, redireciona para `/dashboard`. Sem campos de e-mail/senha.
+`Header` como Server Component (chama `auth()`). Quando autenticado: `UserMenu` (client, dropdown com painel + sair). Quando não autenticado: "Cadastrar negócio" + "Entrar".
 
-### 2.5 Header
-
-- `Header` vira Server Component que chama `auth()` para obter a sessão.
-- Quando autenticado: renderiza `UserMenu` (client component) com avatar, nome truncado, links "Meu painel" e "Sair" (dropdown).
-- Quando não autenticado: exibe botões "Cadastrar negócio" e "Entrar".
+O Header aparece apenas nas rotas do grupo `(main)` — não aparece na homepage map-first.
 
 ---
 
-## 3. Cadastro de Negócio
+## 3. Geocodificação — Nominatim (OpenStreetMap)
 
-### 3.1 Rota `/api/geocode`
+**Não usar Google Maps API.** Substituir por Nominatim — gratuito, sem chave de API.
 
-`GET /api/geocode?address=...`
+### 3.1 `services/maps.ts`
 
-- Chama `geocodeAddress()` de `services/maps.ts` (usa `GOOGLE_MAPS_API_KEY` server-side).
-- Retorna `{ latitude, longitude, formattedAddress }` em caso de sucesso.
-- Se a API key não estiver configurada, retorna `{ error: "geocoding_unavailable" }` com status 503.
-- O frontend exibe: "Cadastro de localização temporariamente indisponível."
+```ts
+GET https://nominatim.openstreetmap.org/search
+  ?q=ENCODED_ADDRESS
+  &format=json
+  &limit=1
+  &countrycodes=br
+
+Headers: User-Agent: EmpreendedorGeneral/1.0
+```
+
+Retorna `{ latitude, longitude, formattedAddress }` ou `null`.
+
+### 3.2 Rota `/api/geocode`
+
+`GET /api/geocode?address=...` — chama `geocodeAddress()` de `services/maps.ts`.
+- Sucesso: `{ latitude, longitude, formattedAddress }`
+- Endereço não encontrado: `{ error: "address_not_found" }` com status 404
+- Falha de serviço: `{ error: "geocoding_error" }` com status 500
 - **Nunca** retorna fallback que permita salvar sem coordenadas.
-
-### 3.2 Formulário `/dashboard/new`
-
-Rota protegida (middleware já cobre `/dashboard/*`). Estrutura visual em seções — um único `<form>` com Server Action:
-
-| Seção | Campos |
-|-------|--------|
-| Dados básicos | nome*, categoria (select), descrição |
-| Contato | telefone, WhatsApp, Instagram, website |
-| Localização | `LocationPicker` (client component) |
-| Horários | texto livre (ex.: "Seg–Sex 8h–18h") |
-| Imagens | **adiado** — schema preparado, UI na próxima iteração |
-
-`*` obrigatório.
 
 ### 3.3 Componente `LocationPicker` (client)
 
-Estados internos: `idle` → `searching` → `confirmed` | `error` | `unavailable`
+Estados: `idle` → `searching` → `preview` | `error` → `confirmed`
 
-Comportamento:
-1. Input de endereço + botão "Buscar endereço"
-2. Ao clicar: fetch para `/api/geocode?address=...`
-3. Se sucesso: exibe Google Maps Embed (`iframe` com `q=lat,lng`) + botão "Confirmar localização"
-4. Ao confirmar: popula hidden inputs `latitude`, `longitude`, `formattedAddress`; exibe badge "Localização confirmada ✓"
-5. O usuário pode clicar "Corrigir" para voltar ao estado `idle` e buscar novamente
-6. Se erro/indisponível: exibe mensagem clara, **não** permite avanço
-
-Hidden inputs (preenchidos pelo `LocationPicker`):
-- `latitude` (obrigatório para submit)
-- `longitude` (obrigatório para submit)
-- `formattedAddress`
-
-**O botão de submit do formulário fica desabilitado enquanto `confirmed === false`.**
-
-### 3.4 Server Action `createBusinessAction`
-
+Preview: usa iframe **OpenStreetMap** embed (não Google Maps):
 ```
-Entrada: FormData (validada com createBusinessSchema + lat/lng obrigatórios)
-
-1. auth() → se não autenticado → erro 401
-2. Validar com Zod (lat e lng como z.number() obrigatórios)
-3. Gerar slug: slugify(name) + verificar unicidade no banco
-   - Formato: `padaria-do-ze`, `padaria-do-ze-2`, `padaria-do-ze-3`
-   - Loop até encontrar slug disponível (contador começa em 2)
-4. prisma.business.create({ status: "PENDING", ownerId: session.user.id, ... })
-5. redirect("/dashboard?cadastro=sucesso")
+https://www.openstreetmap.org/export/embed.html?bbox=LNG±0.01,LAT±0.01&layer=mapnik&marker=LAT,LNG
 ```
 
-Não promove role do usuário. Não cria `EntrepreneurProfile`.
+Hidden inputs: `latitude`, `longitude`, `formattedAddress` — obrigatórios para submit.
+
+**Submit bloqueado** enquanto `confirmed === false`.
 
 ---
 
-## 4. Painel Admin
+## 4. Cadastro de Negócio
 
-### 4.1 Rota `/admin/businesses`
+### 4.1 Formulário `/dashboard/new` (em rota `(main)`)
 
-Server Component. Guard: verifica `session.user.role` — se não for `ADMIN` ou `SUPER_ADMIN`, `redirect("/")`.
+Seções: dados básicos (nome*, categoria, descrição), contato (telefone, WhatsApp, Instagram, website), localização (`LocationPicker`), horários (texto livre). Imagens: adiadas.
 
-Exibe tabela com colunas: **Nome**, **Categoria**, **Dono** (nome + e-mail), **Endereço**, **Cadastrado em**, **Ações**.
+### 4.2 Server Action `createBusinessAction`
 
-Filtro por status visível: padrão mostra `PENDING`. Toggle para ver `APPROVED` e `REJECTED`.
-
-### 4.2 Server Action `approveBusinessAction(businessId)`
-
-```
-1. auth() → verificar role (ADMIN | SUPER_ADMIN)
-2. prisma.business.update({ status: "APPROVED" })
-3. Buscar owner do negócio
-4. Se owner.role === "USER":
-   a. prisma.user.update({ role: "ENTREPRENEUR" })
-   b. prisma.entrepreneurProfile.upsert({ where: { userId }, create: {...}, update: {} })
-5. prisma.adminAction.create({ action: "APPROVE_BUSINESS", targetId: businessId, adminId })
-6. revalidatePath("/admin/businesses")
-7. revalidatePath("/businesses")
-8. revalidatePath("/")
-9. revalidatePath(`/businesses/${business.slug}`)
-```
-
-### 4.3 Server Action `rejectBusinessAction(businessId, reason: string)`
-
-```
-reason é obrigatório (mínimo 10 caracteres).
-
-1. auth() → verificar role (ADMIN | SUPER_ADMIN)
-2. prisma.business.update({ status: "REJECTED", rejectionReason: reason })
-3. prisma.adminAction.create({ action: "REJECT_BUSINESS", targetId: businessId, adminId, reason })
-4. revalidatePath("/admin/businesses")
-```
-
-Não altera role do usuário.
+1. `auth()` → se não autenticado → erro
+2. Validar com Zod (lat/lng obrigatórios via `z.coerce.number()`)
+3. Gerar slug único: `padaria-do-ze`, `padaria-do-ze-2`, `padaria-do-ze-3` (loop com contador a partir de 2)
+4. `prisma.business.create({ status: "PENDING" })`
+5. `redirect("/dashboard?cadastro=sucesso")`
 
 ---
 
-## 5. Dashboard do Empreendedor `/dashboard`
+## 5. Painel Admin `/admin/businesses` (em rota `(main)`)
 
-Server Component protegido. Exibe:
+Guard: `role === "ADMIN" | "SUPER_ADMIN"`.
 
-- Lista de negócios do usuário com: nome, status (badge colorido), data de cadastro.
-- Status mapping:
-  - `PENDING` → badge amarelo + "Aguardando aprovação"
-  - `APPROVED` → badge verde + link para a página pública
-  - `REJECTED` → badge vermelho + motivo da rejeição (`business.rejectionReason`) + "Verifique os requisitos e cadastre novamente"
-- CTA "Cadastrar novo negócio" → `/dashboard/new`
-- Se lista vazia: estado vazio com CTA.
+### 5.1 `approveBusinessAction(businessId)`
+
+1. Verificar role
+2. `business.update({ status: "APPROVED" })`
+3. Se `owner.role === "USER"` → promover para `ENTREPRENEUR` + criar `EntrepreneurProfile`
+4. `adminAction.create({ action: "APPROVE_BUSINESS" })`
+5. Revalidar: `/admin/businesses`, `/businesses`, `/`, `/businesses/[slug]`
+
+### 5.2 `rejectBusinessAction(businessId, reason: string)`
+
+`reason` obrigatório (mínimo 10 caracteres).
+1. Verificar role
+2. `business.update({ status: "REJECTED", rejectionReason: reason })`
+3. `adminAction.create({ action: "REJECT_BUSINESS", reason })`
+4. Revalidar: `/admin/businesses`
 
 ---
 
-## 6. Fora do Escopo deste Sprint
+## 6. Dashboard do Empreendedor `/dashboard` (em rota `(main)`)
+
+Lista negócios do usuário com status badges:
+- `PENDING` → amarelo + "Aguardando aprovação"
+- `APPROVED` → verde + link para página pública
+- `REJECTED` → vermelho + `rejectionReason` + "Verifique os requisitos"
+
+---
+
+## 7. Arquitetura de Rotas — Route Groups
+
+O root layout `app/layout.tsx` passa a ser mínimo (html, body, fonts, providers). Header e Footer ficam em `app/(main)/layout.tsx`.
+
+```
+app/
+  layout.tsx                    ← root: html, body, fonts apenas
+  page.tsx                      ← homepage = mapa-first (sem header/footer)
+  (main)/
+    layout.tsx                  ← Header + Footer
+    login/page.tsx
+    businesses/
+    dashboard/
+    admin/
+  api/
+    geocode/route.ts
+    auth/[...nextauth]/route.ts
+```
+
+Rotas como `/businesses`, `/dashboard`, `/admin`, `/login` ficam dentro de `(main)` e exibem o header padrão. A homepage `/` fica fora e exibe apenas o mapa full-screen com overlays próprios.
+
+---
+
+## 8. Homepage Map-First (`/`)
+
+### 8.1 Experiência desejada
+
+Ao abrir o app, o usuário vê o mapa de General Sampaio preenchido com pins dos negócios aprovados. A marca, busca e filtros aparecem como overlays sobre o mapa — não acima/abaixo. Mobile-first, premium, leve.
+
+### 8.2 Estrutura da tela
+
+```
+┌────────────────────────────────────┐
+│ [Logo] Empreende General    [👤][+] │  ← overlay header (fixo, blur bg)
+│ [🔍 Buscar negócios...          ]   │  ← barra de busca overlay
+│ [Alimentação][Beleza][Serviços]...  │  ← chips de categoria (scroll horizontal)
+├────────────────────────────────────┤
+│                                    │
+│          MAPA LEAFLET              │  ← ocupa 100dvh
+│    📍 📍    📍                     │
+│         📍                         │
+│                                    │
+│  [📍 Usar minha localização]        │  ← botão FAB canto inferior esquerdo
+└────────────────────────────────────┘
+```
+
+Ao clicar em pin → abre `BusinessMapCard` como sheet/card sobre o mapa.
+
+### 8.3 Dados carregados no servidor
+
+```ts
+// app/page.tsx (Server Component)
+const businesses = await prisma.business.findMany({
+  where: { status: "APPROVED", latitude: { not: null }, longitude: { not: null } },
+  select: { id, name, slug, latitude, longitude, category, featured, phone, whatsapp, address }
+})
+const categories = await prisma.category.findMany({ orderBy: { name: "asc" } })
+```
+
+Passados como props para os componentes client.
+
+---
+
+## 9. Componentes de Mapa
+
+### 9.1 `MapView` (client, SSR: false)
+
+Localização: `components/map/MapView.tsx`
+
+- Carregado via `dynamic(() => import("./MapView"), { ssr: false })` — Leaflet não suporta SSR
+- Tile: `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`
+- Centro padrão: General Sampaio, CE (`-3.754, -39.453`), zoom 14
+- Marker customizado por categoria (DivIcon HTML com emoji + cor):
+
+| Categoria | Emoji | Cor |
+|-----------|-------|-----|
+| Alimentação | 🍽️ | laranja |
+| Beleza | 💅 | rosa |
+| Comércio | 🛍️ | azul |
+| Serviços | 🔧 | cinza |
+| Agro | 🌾 | verde |
+| Saúde | ❤️ | vermelho |
+| Default | 📍 | azul-dark |
+
+- Negócio em destaque (`featured: true`): marker 1,4× maior + borda dourada
+- Localização do usuário: `navigator.geolocation.getCurrentPosition()` (opcional, ativado por botão)
+- Clique no marker → chama `onSelectBusiness(business)`
+
+### 9.2 `BusinessMapCard` (client)
+
+Localização: `components/map/BusinessMapCard.tsx`
+
+Card/sheet que aparece sobre o mapa ao clicar em um pin. Exibe:
+- Nome do negócio + categoria badge
+- Distância do usuário (se localização disponível): ex. "450 m" ou "1,2 km" — calculado via Haversine no cliente
+- WhatsApp (link direto `https://wa.me/...`)
+- Link "Ver detalhes" → `/businesses/[slug]`
+- Botão X para fechar
+
+Mobile: posicionado na base da tela (fixed bottom). Desktop: card posicionado.
+
+**Fórmula de distância (Haversine):**
+```ts
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number
+```
+Exibição: < 1 km → "450 m", ≥ 1 km → "1,2 km".
+
+### 9.3 `MapOverlayHeader` (client)
+
+Localização: `components/map/MapOverlayHeader.tsx`
+
+Header fixo sobre o mapa com:
+- Logo/marca + slogan (`NEXT_PUBLIC_SLOGAN`)
+- Barra de busca (filtra pins por nome ao digitar)
+- Chips de categoria (filtra pins ao clicar)
+- Botão "+" → `/dashboard/new` (se autenticado) ou `/login`
+- Botão de usuário (avatar se autenticado, ícone se não)
+
+---
+
+## 10. Distância e Localização do Usuário
+
+- Localização é **opcional** — não solicitada automaticamente
+- Botão FAB "📍 Usar minha localização" → chama `navigator.geolocation.getCurrentPosition()`
+- Se negado: UI continua normalmente, distâncias não são exibidas
+- Não rastrear em segundo plano (`watchPosition` não é usado)
+- Google Maps para rota: link externo simples, sem API:
+  `https://www.google.com/maps/search/?api=1&query=LAT,LNG`
+
+---
+
+## 11. Arquitetura futura prevista (não implementar agora)
+
+O modelo `Business` já tem `featured` (boolean). Campos futuros sem implementação agora:
+- `checkIns` — tabela `CheckIn(userId, businessId, createdAt)`
+- `badges` — relação many-to-many `BusinessBadge`
+- `promotions` — tabela `Promotion(businessId, title, discount, validUntil)`
+
+Não implementar. Não bloquear arquitetura para isso.
+
+---
+
+## 12. Fora do Escopo deste Sprint
 
 - Upload de imagens (Cloudinary)
 - Avaliações (interface)
 - Favoritos
-- Mapa público
 - Denúncias
 - Dashboard analítico
 - CMS/artigos
 - Pin arrastável no `LocationPicker`
-- Painel de gestão de admins (SUPER_ADMIN exclusivo)
+- Painel de gestão de admins
+- Check-ins, badges, cupons
+- Importação da planilha de empreendimentos
 
 ---
 
-## 7. Variáveis de Ambiente Necessárias
+## 13. Variáveis de Ambiente Necessárias
 
 ```env
 DATABASE_URL=
@@ -247,6 +347,8 @@ NEXTAUTH_SECRET=
 NEXTAUTH_URL=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-GOOGLE_MAPS_API_KEY=   # server-side only — não expor no cliente neste sprint
 ADMIN_EMAILS=
+NEXT_PUBLIC_SLOGAN=          # exibido no header do mapa
 ```
+
+**Nota:** Nenhuma chave de API de mapas necessária — Nominatim é gratuito e sem autenticação. Google Maps usado apenas como link externo (não API).

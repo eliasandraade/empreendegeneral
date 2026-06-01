@@ -1,12 +1,12 @@
-# First Value Loop Implementation Plan
+# First Value Loop Implementation Plan (v2 — mapa-first)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fechar o primeiro loop completo de valor: Login Google → Cadastro de Negócio → Aprovação Admin → Publicação.
+**Goal:** Login Google → cadastro de negócio com localização → aprovação admin → negócio aparece como pin no mapa público.
 
-**Architecture:** Auth.js v5 com PrismaAdapter lida com sessão; um signIn callback verifica ADMIN_EMAILS e promove SUPER_ADMIN. Cadastro de negócio usa Server Action com Zod + geocodificação server-side via /api/geocode. Painel admin usa Server Actions para aprovar/rejeitar, promovendo o usuário a ENTREPRENEUR na primeira aprovação.
+**Architecture:** Auth.js v5 com PrismaAdapter + ADMIN_EMAILS callback para SUPER_ADMIN. Geocodificação via Nominatim (OpenStreetMap, sem API key). Homepage map-first com Leaflet/React-Leaflet. Route groups separam rotas com Header (`(main)`) da homepage mapa. Server Actions para todas as mutations.
 
-**Tech Stack:** Next.js 14 App Router, TypeScript strict, Prisma/PostgreSQL, Auth.js v5, Zod, Tailwind CSS, shadcn/ui, Google Geocoding API (server-side).
+**Tech Stack:** Next.js 14 App Router, TypeScript strict, Prisma/PostgreSQL, Auth.js v5, Zod, Tailwind CSS, Leaflet + React-Leaflet, Nominatim (geocodificação gratuita).
 
 ---
 
@@ -14,147 +14,113 @@
 
 | Arquivo | Ação | Responsabilidade |
 |---------|------|-----------------|
-| `prisma/schema.prisma` | Modify | Adicionar SUPER_ADMIN, EntrepreneurProfile, AdminAction, rejectionReason |
+| `prisma/schema.prisma` | Modify | ✅ DONE — SUPER_ADMIN, EntrepreneurProfile, AdminAction, hours, rejectionReason |
 | `auth.ts` | Modify | Callback signIn para promoção via ADMIN_EMAILS |
-| `services/maps.ts` | Modify | Trocar NEXT_PUBLIC_ por GOOGLE_MAPS_API_KEY |
+| `services/maps.ts` | Modify | Nominatim geocoding (sem API key) |
 | `lib/slug.ts` | Create | Utilitário de geração de slug único |
 | `lib/actions/business.ts` | Create | createBusinessAction (Server Action) |
 | `lib/actions/admin.ts` | Create | approveBusinessAction + rejectBusinessAction |
 | `validations/index.ts` | Modify | lat/lng obrigatórios em createBusinessSchema |
-| `app/api/geocode/route.ts` | Create | Route handler GET /api/geocode |
-| `app/login/page.tsx` | Create | Página de login com Google |
+| `app/api/geocode/route.ts` | Create | Route handler GET /api/geocode via Nominatim |
+| `app/layout.tsx` | Modify | Root layout mínimo (sem Header/Footer) |
+| `app/(main)/layout.tsx` | Create | Layout com Header + Footer para rotas secundárias |
+| `app/(main)/login/page.tsx` | Create | Página de login com Google |
+| `app/(main)/businesses/` | Move | Mover de app/businesses/ para app/(main)/businesses/ |
 | `components/layout/UserMenu.tsx` | Create | Dropdown de usuário autenticado (client) |
-| `components/layout/Header.tsx` | Modify | Tornar Server Component + integrar UserMenu |
-| `components/businesses/LocationPicker.tsx` | Create | Seletor de localização com mapa (client) |
+| `components/layout/MobileMenuButton.tsx` | Create | Menu mobile (client) |
+| `components/layout/Header.tsx` | Modify | Server Component + UserMenu |
+| `components/businesses/LocationPicker.tsx` | Create | Seletor de localização com OSM (client) |
 | `components/businesses/BusinessForm.tsx` | Create | Formulário completo de cadastro (client) |
-| `app/dashboard/new/page.tsx` | Create | Página de cadastro de negócio |
-| `app/dashboard/page.tsx` | Create | Dashboard do empreendedor |
-| `app/admin/businesses/page.tsx` | Create | Painel admin — lista de negócios |
+| `app/(main)/dashboard/new/page.tsx` | Create | Página de cadastro de negócio |
+| `app/(main)/dashboard/page.tsx` | Create | Dashboard do empreendedor |
+| `app/(main)/admin/businesses/page.tsx` | Create | Painel admin — lista de negócios |
+| `components/map/MapView.tsx` | Create | Mapa Leaflet SSR-safe com pins por categoria |
+| `components/map/BusinessMapCard.tsx` | Create | Card overlay ao clicar em pin |
+| `components/map/MapOverlayHeader.tsx` | Create | Header/busca/filtros sobre o mapa (client) |
+| `app/page.tsx` | Modify | Homepage map-first (substitui hero atual) |
+| `types/index.ts` | Modify | Adicionar LocationData, BusinessMapPin |
 
 ---
 
-## Task 1: Schema Prisma — novos modelos e campos
+## Task 1: Schema Prisma — novos modelos e campos ✅ CONCLUÍDA
 
-**Files:**
-- Modify: `prisma/schema.prisma`
+Schema já foi atualizado. Migration pendente (banco Railway estava inacessível no momento).
 
-- [ ] **Step 1: Atualizar enum UserRole**
-
-Em `prisma/schema.prisma`, substituir o enum:
-
-```prisma
-enum UserRole {
-  USER
-  ENTREPRENEUR
-  ADMIN
-  SUPER_ADMIN
-}
-```
-
-- [ ] **Step 2: Adicionar rejectionReason e hours em Business**
-
-No model `Business`, após `featured Boolean @default(false)`, adicionar:
-
-```prisma
-rejectionReason String? @db.Text
-hours           String? // horário de funcionamento em texto livre
-```
-
-- [ ] **Step 3: Adicionar model EntrepreneurProfile**
-
-Após o model `Business`, adicionar:
-
-```prisma
-model EntrepreneurProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bio       String?  @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-```
-
-- [ ] **Step 4: Adicionar model AdminAction**
-
-Após `EntrepreneurProfile`, adicionar:
-
-```prisma
-model AdminAction {
-  id        String   @id @default(cuid())
-  adminId   String
-  admin     User     @relation(fields: [adminId], references: [id])
-  action    String   // "APPROVE_BUSINESS" | "REJECT_BUSINESS"
-  targetId  String   // ID do negócio alvo
-  reason    String?  @db.Text
-  createdAt DateTime @default(now())
-}
-```
-
-- [ ] **Step 5: Adicionar relações em User**
-
-No model `User`, após `reports Report[]`, adicionar:
-
-```prisma
-entrepreneurProfile EntrepreneurProfile?
-adminActions        AdminAction[]
-```
-
-- [ ] **Step 6: Gerar e rodar migration**
+**Quando o banco estiver acessível, rodar:**
 
 ```bash
+cd C:/Users/Elias/Documents/Prefeitura/empreende-general
 npx prisma migrate dev --name add-super-admin-entrepreneur-profile-admin-action-hours
-```
-
-Saída esperada: `Your database is now in sync with your schema.`
-
-- [ ] **Step 7: Regenerar Prisma Client**
-
-```bash
 npx prisma generate
-```
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add prisma/schema.prisma prisma/migrations
-git commit -m "feat: add SUPER_ADMIN role, EntrepreneurProfile, AdminAction, rejectionReason"
+git add prisma/
+git commit -m "feat: add SUPER_ADMIN role, EntrepreneurProfile, AdminAction, rejectionReason, hours"
 ```
 
 ---
 
-## Task 2: Corrigir services/maps.ts para chave server-side
+## Task 2: Geocodificação via Nominatim (sem API key)
 
 **Files:**
 - Modify: `services/maps.ts`
 
-- [ ] **Step 1: Trocar variável de ambiente**
+- [ ] **Step 1: Reescrever services/maps.ts com Nominatim**
 
-Substituir a linha:
-
-```ts
-const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-```
-
-por:
+Substituir todo o conteúdo de `services/maps.ts`:
 
 ```ts
-const apiKey = process.env.GOOGLE_MAPS_API_KEY
+// services/maps.ts
+// Geocodificação via Nominatim (OpenStreetMap) — gratuito, sem API key
+// Rate limit: 1 req/s (aceitável para geocodificação manual de formulário)
+
+export type GeocodingResult = {
+  latitude: number
+  longitude: number
+  formattedAddress: string
+}
+
+export async function geocodeAddress(
+  address: string
+): Promise<GeocodingResult | null> {
+  const encoded = encodeURIComponent(address.trim())
+  const url = `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&countrycodes=br&addressdetails=1`
+
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "EmpreendedorGeneral/1.0 (contato@andradesystems.com.br)",
+      "Accept-Language": "pt-BR,pt",
+    },
+    next: { revalidate: 3600 }, // cache resultado por 1h no Next.js
+  })
+
+  if (!response.ok) return null
+
+  const data = (await response.json()) as Array<{
+    lat: string
+    lon: string
+    display_name: string
+  }>
+
+  if (!data || data.length === 0) return null
+
+  return {
+    latitude: parseFloat(data[0].lat),
+    longitude: parseFloat(data[0].lon),
+    formattedAddress: data[0].display_name,
+  }
+}
 ```
 
-- [ ] **Step 2: Verificar que nenhum import de maps.ts está em componente client**
+- [ ] **Step 2: Verificar tipos**
 
 ```bash
-grep -r "services/maps" app/ components/ --include="*.tsx" --include="*.ts"
+npx tsc --noEmit
 ```
-
-Saída esperada: nenhum resultado em arquivo com `"use client"`. Se houver, mover a chamada para um Server Component ou Route Handler.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add services/maps.ts
-git commit -m "fix: use server-side GOOGLE_MAPS_API_KEY instead of NEXT_PUBLIC_ prefix"
+git commit -m "feat: replace Google Maps geocoding with Nominatim (OpenStreetMap, no API key)"
 ```
 
 ---
@@ -203,7 +169,7 @@ callbacks: {
 },
 ```
 
-O `auth.ts` completo fica:
+O `auth.ts` completo:
 
 ```ts
 import NextAuth from "next-auth"
@@ -260,21 +226,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 })
 ```
 
-- [ ] **Step 2: Verificar tipos — ADMIN_EMAILS deve estar no .env.local**
-
-Adicionar ao `.env.local` (se não existir):
+- [ ] **Step 2: Adicionar ADMIN_EMAILS ao .env.local**
 
 ```env
 ADMIN_EMAILS=seuemail@gmail.com
 ```
 
-- [ ] **Step 3: Verificar build sem erros de tipo**
+- [ ] **Step 3: Verificar tipos**
 
 ```bash
 npx tsc --noEmit
 ```
-
-Saída esperada: nenhum erro.
 
 - [ ] **Step 4: Commit**
 
@@ -285,15 +247,113 @@ git commit -m "feat: promote SUPER_ADMIN on first login via ADMIN_EMAILS env var
 
 ---
 
-## Task 4: Página de login /login
+## Task 4: Route Groups — separar homepage de rotas com header
 
 **Files:**
-- Create: `app/login/page.tsx`
+- Modify: `app/layout.tsx`
+- Create: `app/(main)/layout.tsx`
+- Move: `app/businesses/` → `app/(main)/businesses/`
 
-- [ ] **Step 1: Criar página de login**
+> Contexto: o root layout atual tem Header e Footer. A homepage map-first não quer esses elementos. Route groups resolvem isso elegantemente no Next.js App Router.
+
+- [ ] **Step 1: Simplificar app/layout.tsx (remover Header e Footer)**
 
 ```tsx
-// app/login/page.tsx
+// app/layout.tsx
+import type { Metadata } from "next"
+import localFont from "next/font/local"
+import "./globals.css"
+import { APP_CONFIG } from "@/config"
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+})
+
+export const metadata: Metadata = {
+  title: {
+    default: APP_CONFIG.name,
+    template: `%s | ${APP_CONFIG.name}`,
+  },
+  description: APP_CONFIG.description,
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="pt-BR">
+      <body className={`${geistSans.variable} antialiased`}>
+        {children}
+      </body>
+    </html>
+  )
+}
+```
+
+- [ ] **Step 2: Criar app/(main)/layout.tsx com Header + Footer**
+
+```tsx
+// app/(main)/layout.tsx
+import { Header } from "@/components/layout/Header"
+import { Footer } from "@/components/layout/Footer"
+
+export default function MainLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1">{children}</main>
+      <Footer />
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Mover app/businesses/ para app/(main)/businesses/**
+
+No Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Path "app/(main)" -Force
+Move-Item "app/businesses" "app/(main)/businesses"
+```
+
+- [ ] **Step 4: Verificar que as rotas continuam funcionando**
+
+```bash
+npm run build 2>&1 | head -50
+```
+
+Saída esperada: sem erros de rotas. `/businesses` e `/businesses/[slug]` devem continuar acessíveis.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/layout.tsx "app/(main)/"
+git commit -m "refactor: root layout minimal, (main) route group with Header+Footer"
+```
+
+---
+
+## Task 5: Página de login e Header com UserMenu
+
+**Files:**
+- Create: `app/(main)/login/page.tsx`
+- Create: `components/layout/UserMenu.tsx`
+- Create: `components/layout/MobileMenuButton.tsx`
+- Modify: `components/layout/Header.tsx`
+
+- [ ] **Step 1: Criar app/(main)/login/page.tsx**
+
+```tsx
+// app/(main)/login/page.tsx
 import { signIn } from "@/auth"
 
 export const metadata = { title: "Entrar — Empreende General" }
@@ -340,28 +400,7 @@ export default function LoginPage() {
 }
 ```
 
-- [ ] **Step 2: Verificar build**
-
-```bash
-npx tsc --noEmit
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add app/login/page.tsx
-git commit -m "feat: login page with Google OAuth"
-```
-
----
-
-## Task 5: Header — Server Component + UserMenu
-
-**Files:**
-- Create: `components/layout/UserMenu.tsx`
-- Modify: `components/layout/Header.tsx`
-
-- [ ] **Step 1: Criar UserMenu client component**
+- [ ] **Step 2: Criar components/layout/UserMenu.tsx**
 
 ```tsx
 // components/layout/UserMenu.tsx
@@ -371,7 +410,7 @@ import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { signOut } from "next-auth/react"
-import { ChevronDown, LayoutDashboard, LogOut } from "lucide-react"
+import { ChevronDown, LayoutDashboard, LogOut, ShieldCheck } from "lucide-react"
 
 interface UserMenuProps {
   name: string | null | undefined
@@ -404,13 +443,7 @@ export function UserMenu({ name, email, image, role }: UserMenuProps) {
         className="flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-gray-100 transition-colors"
       >
         {image ? (
-          <Image
-            src={image}
-            alt={name ?? "Usuário"}
-            width={28}
-            height={28}
-            className="rounded-full"
-          />
+          <Image src={image} alt={name ?? "Usuário"} width={28} height={28} className="rounded-full" />
         ) : (
           <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-semibold">
             {initials}
@@ -428,21 +461,13 @@ export function UserMenu({ name, email, image, role }: UserMenuProps) {
             <p className="text-xs font-semibold text-gray-700 truncate">{name}</p>
             <p className="text-xs text-gray-400 truncate">{email}</p>
           </div>
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            onClick={() => setOpen(false)}
-          >
+          <Link href="/dashboard" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setOpen(false)}>
             <LayoutDashboard size={15} className="text-gray-400" />
             Meu painel
           </Link>
           {isAdmin && (
-            <Link
-              href="/admin/businesses"
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              onClick={() => setOpen(false)}
-            >
-              <LayoutDashboard size={15} className="text-blue-600" />
+            <Link href="/admin/businesses" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setOpen(false)}>
+              <ShieldCheck size={15} className="text-blue-600" />
               Painel admin
             </Link>
           )}
@@ -460,86 +485,7 @@ export function UserMenu({ name, email, image, role }: UserMenuProps) {
 }
 ```
 
-- [ ] **Step 2: Reescrever Header como Server Component**
-
-Substituir todo o conteúdo de `components/layout/Header.tsx`:
-
-```tsx
-// components/layout/Header.tsx
-import Link from "next/link"
-import { auth } from "@/auth"
-import { APP_CONFIG } from "@/config"
-import { UserMenu } from "./UserMenu"
-import { MobileMenuButton } from "./MobileMenuButton"
-
-export async function Header() {
-  const session = await auth()
-  const user = session?.user
-
-  const navLinks = [
-    { href: "/", label: "Início" },
-    { href: "/businesses", label: "Negócios" },
-  ]
-
-  return (
-    <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
-      <div className="container flex items-center justify-between h-16">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-lg font-bold text-blue-700">{APP_CONFIG.name}</span>
-        </Link>
-
-        {/* Nav desktop */}
-        <nav className="hidden md:flex items-center gap-6">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm text-gray-600 hover:text-blue-700 transition-colors"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
-        {/* CTAs desktop */}
-        <div className="hidden md:flex items-center gap-3">
-          {user ? (
-            <UserMenu
-              name={user.name}
-              email={user.email}
-              image={user.image}
-              role={user.role}
-            />
-          ) : (
-            <>
-              <Link
-                href="/dashboard/new"
-                className="text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors"
-              >
-                Cadastrar negócio
-              </Link>
-              <Link
-                href="/login"
-                className="text-sm font-semibold bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 transition-colors"
-              >
-                Entrar
-              </Link>
-            </>
-          )}
-        </div>
-
-        {/* Mobile: MobileMenuButton */}
-        <MobileMenuButton user={user ?? null} navLinks={navLinks} />
-      </div>
-    </header>
-  )
-}
-```
-
-- [ ] **Step 3: Criar MobileMenuButton client component**
-
-Criar `components/layout/MobileMenuButton.tsx`:
+- [ ] **Step 3: Criar components/layout/MobileMenuButton.tsx**
 
 ```tsx
 // components/layout/MobileMenuButton.tsx
@@ -561,53 +507,31 @@ export function MobileMenuButton({ navLinks, user }: Props) {
 
   return (
     <>
-      <button
-        className="md:hidden p-2 text-gray-600"
-        onClick={() => setOpen(!open)}
-        aria-label="Menu"
-      >
+      <button className="md:hidden p-2 text-gray-600" onClick={() => setOpen(!open)} aria-label="Menu">
         {open ? <X size={22} /> : <Menu size={22} />}
       </button>
 
       {open && (
-        <div className="md:hidden absolute top-16 left-0 right-0 border-t border-gray-100 bg-white shadow-md">
+        <div className="md:hidden absolute top-16 left-0 right-0 border-t border-gray-100 bg-white shadow-md z-40">
           <nav className="container flex flex-col py-4 gap-4">
             {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm text-gray-600 hover:text-blue-700"
-                onClick={() => setOpen(false)}
-              >
+              <Link key={link.href} href={link.href} className="text-sm text-gray-600 hover:text-blue-700" onClick={() => setOpen(false)}>
                 {link.label}
               </Link>
             ))}
             <hr className="border-gray-100" />
             {user ? (
               <>
-                <Link href="/dashboard" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>
-                  Meu painel
-                </Link>
+                <Link href="/dashboard" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>Meu painel</Link>
                 {isAdmin && (
-                  <Link href="/admin/businesses" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>
-                    Painel admin
-                  </Link>
+                  <Link href="/admin/businesses" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>Painel admin</Link>
                 )}
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="text-left text-sm font-medium text-red-600"
-                >
-                  Sair
-                </button>
+                <button onClick={() => signOut({ callbackUrl: "/" })} className="text-left text-sm font-medium text-red-600">Sair</button>
               </>
             ) : (
               <>
-                <Link href="/dashboard/new" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>
-                  Cadastrar negócio
-                </Link>
-                <Link href="/login" className="text-sm font-semibold bg-blue-700 text-white px-4 py-2 rounded-lg text-center" onClick={() => setOpen(false)}>
-                  Entrar
-                </Link>
+                <Link href="/dashboard/new" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>Cadastrar negócio</Link>
+                <Link href="/login" className="text-sm font-semibold bg-blue-700 text-white px-4 py-2 rounded-lg text-center" onClick={() => setOpen(false)}>Entrar</Link>
               </>
             )}
           </nav>
@@ -618,22 +542,89 @@ export function MobileMenuButton({ navLinks, user }: Props) {
 }
 ```
 
-- [ ] **Step 4: Verificar tipos**
+- [ ] **Step 4: Reescrever Header como Server Component**
+
+```tsx
+// components/layout/Header.tsx
+import Link from "next/link"
+import { auth } from "@/auth"
+import { APP_CONFIG } from "@/config"
+import { UserMenu } from "./UserMenu"
+import { MobileMenuButton } from "./MobileMenuButton"
+
+const navLinks = [
+  { href: "/businesses", label: "Negócios" },
+]
+
+export async function Header() {
+  const session = await auth()
+  const user = session?.user
+
+  return (
+    <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
+      <div className="container flex items-center justify-between h-16">
+        <Link href="/" className="flex items-center gap-2">
+          <span className="text-lg font-bold text-blue-700">{APP_CONFIG.name}</span>
+        </Link>
+
+        <nav className="hidden md:flex items-center gap-6">
+          {navLinks.map((link) => (
+            <Link key={link.href} href={link.href} className="text-sm text-gray-600 hover:text-blue-700 transition-colors">
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="hidden md:flex items-center gap-3">
+          {user ? (
+            <UserMenu name={user.name} email={user.email} image={user.image} role={user.role} />
+          ) : (
+            <>
+              <Link href="/dashboard/new" className="text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors">
+                Cadastrar negócio
+              </Link>
+              <Link href="/login" className="text-sm font-semibold bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 transition-colors">
+                Entrar
+              </Link>
+            </>
+          )}
+        </div>
+
+        <MobileMenuButton user={user ?? null} navLinks={navLinks} />
+      </div>
+    </header>
+  )
+}
+```
+
+- [ ] **Step 5: Atualizar middleware.ts para incluir nova rota /login**
+
+O middleware já protege `/dashboard/*` e `/admin/*`. Verificar que `/login` NÃO está protegido (não deve estar). Verificar `middleware.ts`:
+
+```ts
+export const config = {
+  matcher: ["/dashboard/:path*", "/admin/:path*"],
+}
+```
+
+Nenhuma mudança necessária se já estiver assim.
+
+- [ ] **Step 6: Verificar build**
 
 ```bash
 npx tsc --noEmit
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add components/layout/
-git commit -m "feat: header as Server Component with UserMenu and MobileMenuButton"
+git add "app/(main)/login/" components/layout/
+git commit -m "feat: login page, Header as Server Component, UserMenu, MobileMenuButton"
 ```
 
 ---
 
-## Task 6: Route Handler GET /api/geocode
+## Task 6: Route Handler GET /api/geocode (Nominatim)
 
 **Files:**
 - Create: `app/api/geocode/route.ts`
@@ -652,10 +643,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "invalid_address" }, { status: 400 })
   }
 
-  if (!process.env.GOOGLE_MAPS_API_KEY) {
-    return NextResponse.json({ error: "geocoding_unavailable" }, { status: 503 })
-  }
-
   try {
     const result = await geocodeAddress(address.trim())
 
@@ -670,40 +657,39 @@ export async function GET(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 2: Testar manualmente**
+- [ ] **Step 2: Testar manualmente com o servidor rodando**
 
-Com o servidor rodando (`npm run dev`), acessar:
+```bash
+npm run dev
+```
+
+Em outro terminal ou no browser:
 
 ```
 http://localhost:3000/api/geocode?address=General+Sampaio+CE
 ```
 
-Saída esperada (com GOOGLE_MAPS_API_KEY configurada):
+Saída esperada:
 ```json
-{ "latitude": -3.76, "longitude": -39.45, "formattedAddress": "General Sampaio - CE, Brasil" }
-```
-
-Saída esperada (sem chave configurada):
-```json
-{ "error": "geocoding_unavailable" }
+{ "latitude": -3.754, "longitude": -39.453, "formattedAddress": "General Sampaio, Ceará, Brasil" }
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add app/api/geocode/route.ts
-git commit -m "feat: GET /api/geocode route handler for server-side geocoding"
+git add app/api/geocode/
+git commit -m "feat: GET /api/geocode route handler via Nominatim (no API key)"
 ```
 
 ---
 
-## Task 7: Componente LocationPicker
+## Task 7: LocationPicker + LocationData type
 
 **Files:**
 - Modify: `types/index.ts`
 - Create: `components/businesses/LocationPicker.tsx`
 
-- [ ] **Step 1: Adicionar LocationData a types/index.ts**
+- [ ] **Step 1: Adicionar LocationData e BusinessMapPin a types/index.ts**
 
 Adicionar ao final de `types/index.ts`:
 
@@ -713,9 +699,22 @@ export type LocationData = {
   longitude: number
   formattedAddress: string
 }
+
+export type BusinessMapPin = {
+  id: string
+  name: string
+  slug: string
+  latitude: number
+  longitude: number
+  featured: boolean
+  phone: string | null
+  whatsapp: string | null
+  address: string | null
+  category: { name: string; slug: string; icon: string | null } | null
+}
 ```
 
-- [ ] **Step 2: Criar componente**
+- [ ] **Step 2: Criar LocationPicker**
 
 ```tsx
 // components/businesses/LocationPicker.tsx
@@ -731,7 +730,7 @@ interface Props {
   confirmed: boolean
 }
 
-type State = "idle" | "searching" | "preview" | "confirmed" | "error" | "unavailable"
+type State = "idle" | "searching" | "preview" | "confirmed" | "error"
 
 export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
   const [address, setAddress] = useState("")
@@ -749,16 +748,11 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
       const data = await res.json()
 
       if (!res.ok) {
-        if (data.error === "geocoding_unavailable") {
-          setState("unavailable")
-          return
-        }
         if (data.error === "address_not_found") {
           setErrorMsg("Endereço não encontrado. Tente ser mais específico.")
-          setState("error")
-          return
+        } else {
+          setErrorMsg("Erro ao buscar endereço. Tente novamente.")
         }
-        setErrorMsg("Erro ao buscar endereço. Tente novamente.")
         setState("error")
         return
       }
@@ -791,7 +785,6 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Input de endereço */}
       <div className="flex gap-2">
         <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-4 py-3 bg-white focus-within:border-blue-400 transition-colors">
           <MapPin size={16} className="text-gray-400 shrink-0" />
@@ -811,16 +804,11 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
           disabled={state === "searching" || state === "confirmed" || address.trim().length < 3}
           className="flex items-center gap-2 bg-blue-700 text-white text-sm font-semibold px-4 py-3 rounded-xl hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
-          {state === "searching" ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Search size={15} />
-          )}
+          {state === "searching" ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
           Buscar
         </button>
       </div>
 
-      {/* Estado: erro */}
       {state === "error" && (
         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
           <AlertCircle size={15} className="shrink-0" />
@@ -828,34 +816,16 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
         </div>
       )}
 
-      {/* Estado: indisponível */}
-      {state === "unavailable" && (
-        <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <AlertCircle size={15} className="shrink-0" />
-          Localização temporariamente indisponível. Tente novamente mais tarde.
-        </div>
-      )}
-
-      {/* Estado: preview do mapa */}
       {state === "preview" && mapSrc && result && (
         <div className="flex flex-col gap-3">
           <div className="rounded-xl overflow-hidden border border-gray-200 h-48">
-            <iframe
-              src={mapSrc}
-              width="100%"
-              height="100%"
-              className="border-0"
-              loading="lazy"
-              title="Localização no mapa"
-            />
+            <iframe src={mapSrc} width="100%" height="100%" className="border-0" loading="lazy" title="Localização no mapa" />
           </div>
           <p className="text-sm text-gray-600 flex items-start gap-2">
             <MapPin size={14} className="text-blue-600 mt-0.5 shrink-0" />
             {result.formattedAddress}
           </p>
-          <p className="text-xs text-gray-400">
-            Não é o endereço certo? Corrija o campo acima e busque novamente.
-          </p>
+          <p className="text-xs text-gray-400">Não é o endereço certo? Corrija o campo e busque novamente.</p>
           <button
             type="button"
             onClick={handleConfirm}
@@ -867,7 +837,6 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
         </div>
       )}
 
-      {/* Estado: confirmado */}
       {state === "confirmed" && result && (
         <div className="flex items-start justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3">
           <div className="flex items-start gap-2">
@@ -877,11 +846,7 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
               <p className="text-xs text-green-600 mt-0.5">{result.formattedAddress}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-xs text-gray-500 hover:text-gray-700 underline shrink-0 ml-3"
-          >
+          <button type="button" onClick={handleReset} className="text-xs text-gray-500 hover:text-gray-700 underline shrink-0 ml-3">
             Corrigir
           </button>
         </div>
@@ -891,22 +856,22 @@ export function LocationPicker({ onConfirm, onReset, confirmed }: Props) {
 }
 ```
 
-- [ ] **Step 2: Verificar tipos**
+- [ ] **Step 3: Verificar tipos**
 
 ```bash
 npx tsc --noEmit
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add components/businesses/LocationPicker.tsx
-git commit -m "feat: LocationPicker client component with OpenStreetMap preview"
+git add types/index.ts components/businesses/LocationPicker.tsx
+git commit -m "feat: LocationPicker with OSM preview, LocationData and BusinessMapPin types"
 ```
 
 ---
 
-## Task 8: Slug utility + validação atualizada
+## Task 8: Slug utility + createBusinessSchema atualizado
 
 **Files:**
 - Create: `lib/slug.ts`
@@ -984,8 +949,6 @@ export const createBusinessSchema = z.object({
 export type CreateBusinessInput = z.infer<typeof createBusinessSchema>
 ```
 
-Nota: `latitude` e `longitude` são agora **obrigatórios** (sem `.optional()`). Usamos `z.coerce.number()` para converter os valores de string vindos do FormData.
-
 - [ ] **Step 3: Verificar tipos**
 
 ```bash
@@ -996,7 +959,7 @@ npx tsc --noEmit
 
 ```bash
 git add lib/slug.ts validations/index.ts
-git commit -m "feat: slug utility and make lat/lng required in business schema"
+git commit -m "feat: slug utility and lat/lng required in business schema"
 ```
 
 ---
@@ -1006,7 +969,7 @@ git commit -m "feat: slug utility and make lat/lng required in business schema"
 **Files:**
 - Create: `lib/actions/business.ts`
 
-- [ ] **Step 1: Criar diretório e arquivo**
+- [ ] **Step 1: Criar arquivo**
 
 ```ts
 // lib/actions/business.ts
@@ -1055,7 +1018,6 @@ export async function createBusinessAction(
   }
 
   const data = result.data
-
   const slug = await generateUniqueSlug(data.name)
 
   await prisma.business.create({
@@ -1094,7 +1056,7 @@ npx tsc --noEmit
 
 ```bash
 git add lib/actions/business.ts
-git commit -m "feat: createBusinessAction server action with Zod validation and slug generation"
+git commit -m "feat: createBusinessAction with Nominatim geocoding and slug generation"
 ```
 
 ---
@@ -1141,22 +1103,12 @@ export function BusinessForm({ categories }: Props) {
   )
   const [locationData, setLocationData] = useState<LocationData | null>(null)
 
-  function handleLocationConfirm(data: LocationData) {
-    setLocationData(data)
-  }
-
-  function handleLocationReset() {
-    setLocationData(null)
-  }
-
   return (
     <form action={formAction} className="flex flex-col gap-8">
-      {/* Hidden inputs de localização */}
       <input type="hidden" name="latitude" value={locationData?.latitude ?? ""} />
       <input type="hidden" name="longitude" value={locationData?.longitude ?? ""} />
       <input type="hidden" name="formattedAddress" value={locationData?.formattedAddress ?? ""} />
 
-      {/* Erro global */}
       {state && !state.success && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
           {state.error}
@@ -1165,95 +1117,49 @@ export function BusinessForm({ categories }: Props) {
 
       {/* Seção 1: Dados básicos */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
-          Dados básicos
-        </h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">Dados básicos</h2>
         <div className="flex flex-col gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Nome do negócio <span className="text-red-500">*</span>
             </label>
-            <input
-              name="name"
-              required
-              maxLength={100}
-              placeholder="Ex.: Padaria do Zé"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-            />
+            <input name="name" required maxLength={100} placeholder="Ex.: Padaria do Zé" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Categoria
-            </label>
-            <select
-              name="categoryId"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 bg-white"
-            >
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
+            <select name="categoryId" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 bg-white">
               <option value="">Selecionar categoria</option>
               {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Descrição
-            </label>
-            <textarea
-              name="description"
-              rows={4}
-              maxLength={2000}
-              placeholder="Conte um pouco sobre seu negócio, produtos ou serviços..."
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 resize-none"
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
+            <textarea name="description" rows={4} maxLength={2000} placeholder="Conte sobre seu negócio..." className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 resize-none" />
           </div>
         </div>
       </section>
 
       {/* Seção 2: Contato */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
-          Contato
-        </h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">Contato</h2>
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone</label>
-            <input
-              name="phone"
-              type="tel"
-              placeholder="(85) 99999-9999"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-            />
+            <input name="phone" type="tel" placeholder="(85) 99999-9999" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">WhatsApp</label>
-            <input
-              name="whatsapp"
-              type="tel"
-              placeholder="(85) 99999-9999"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-            />
+            <input name="whatsapp" type="tel" placeholder="(85) 99999-9999" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Instagram</label>
-            <input
-              name="instagram"
-              placeholder="@seuperfil"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-            />
+            <input name="instagram" placeholder="@seuperfil" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Site</label>
-            <input
-              name="website"
-              type="url"
-              placeholder="https://exemplo.com"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-            />
+            <input name="website" type="url" placeholder="https://exemplo.com" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
           </div>
         </div>
       </section>
@@ -1263,73 +1169,45 @@ export function BusinessForm({ categories }: Props) {
         <h2 className="text-base font-semibold text-gray-800 mb-1 pb-2 border-b border-gray-100">
           Localização <span className="text-red-500">*</span>
         </h2>
-        <p className="text-xs text-gray-400 mb-4">
-          Digite o endereço, confirme o pin no mapa e clique em "Confirmar localização".
-        </p>
+        <p className="text-xs text-gray-400 mb-4">Digite o endereço, confirme o pin no mapa e clique em "Confirmar localização".</p>
         <div className="flex flex-col gap-3">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
-              <input
-                name="address"
-                placeholder="Rua, número, bairro"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-              />
+              <input name="address" placeholder="Rua, número, bairro" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Cidade</label>
-              <input
-                name="city"
-                defaultValue="General Sampaio"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-              />
+              <input name="city" defaultValue="General Sampaio" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">UF</label>
-              <input
-                name="state"
-                defaultValue="CE"
-                maxLength={2}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 uppercase"
-              />
+              <input name="state" defaultValue="CE" maxLength={2} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 uppercase" />
             </div>
           </div>
           <LocationPicker
-            onConfirm={handleLocationConfirm}
-            onReset={handleLocationReset}
+            onConfirm={setLocationData}
+            onReset={() => setLocationData(null)}
             confirmed={!!locationData}
           />
           {!locationData && (
-            <p className="text-xs text-amber-600">
-              ⚠ Confirme a localização no mapa para prosseguir.
-            </p>
+            <p className="text-xs text-amber-600">⚠ Confirme a localização no mapa para prosseguir.</p>
           )}
         </div>
       </section>
 
       {/* Seção 4: Horários */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
-          Horários
-        </h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">Horários</h2>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Horário de funcionamento
-          </label>
-          <input
-            name="hours"
-            placeholder="Ex.: Seg–Sex 8h–18h, Sáb 8h–12h"
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400"
-          />
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Horário de funcionamento</label>
+          <input name="hours" placeholder="Ex.: Seg–Sex 8h–18h, Sáb 8h–12h" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400" />
         </div>
       </section>
 
-      {/* Submit */}
       <div className="pt-2">
         <SubmitButton disabled={!locationData} />
-        <p className="text-xs text-gray-400 text-center mt-3">
-          Seu negócio será revisado antes de aparecer publicamente.
-        </p>
+        <p className="text-xs text-gray-400 text-center mt-3">Seu negócio será revisado antes de aparecer publicamente.</p>
       </div>
     </form>
   )
@@ -1346,20 +1224,21 @@ npx tsc --noEmit
 
 ```bash
 git add components/businesses/BusinessForm.tsx
-git commit -m "feat: BusinessForm client component with LocationPicker integration"
+git commit -m "feat: BusinessForm with LocationPicker, useFormState, submit blocked without location"
 ```
 
 ---
 
-## Task 11: Página /dashboard/new
+## Task 11: Páginas /dashboard e /dashboard/new (em (main))
 
 **Files:**
-- Create: `app/dashboard/new/page.tsx`
+- Create: `app/(main)/dashboard/new/page.tsx`
+- Create: `app/(main)/dashboard/page.tsx`
 
-- [ ] **Step 1: Criar página**
+- [ ] **Step 1: Criar app/(main)/dashboard/new/page.tsx**
 
 ```tsx
-// app/dashboard/new/page.tsx
+// app/(main)/dashboard/new/page.tsx
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
@@ -1367,7 +1246,7 @@ import { BusinessForm } from "@/components/businesses/BusinessForm"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
-export const metadata = { title: "Cadastrar negócio — Empreende General" }
+export const metadata = { title: "Cadastrar negócio" }
 
 export default async function NewBusinessPage() {
   const session = await auth()
@@ -1375,56 +1254,28 @@ export default async function NewBusinessPage() {
 
   const categories = await prisma.category.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, slug: true, icon: true, description: true, createdAt: true, updatedAt: true },
   })
 
   return (
     <div className="container max-w-2xl px-6 py-10">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-700 transition-colors mb-8"
-      >
+      <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-700 transition-colors mb-8">
         <ArrowLeft size={16} />
         Voltar ao painel
       </Link>
-
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">Cadastrar negócio</h1>
-        <p className="text-gray-500 text-sm">
-          Preencha as informações do seu empreendimento. Após o cadastro, nossa equipe irá revisar e aprovar.
-        </p>
+        <p className="text-gray-500 text-sm">Preencha as informações. Após o cadastro, nossa equipe irá revisar e aprovar.</p>
       </div>
-
       <BusinessForm categories={categories} />
     </div>
   )
 }
 ```
 
-- [ ] **Step 2: Verificar build**
-
-```bash
-npx tsc --noEmit
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add app/dashboard/new/page.tsx
-git commit -m "feat: /dashboard/new page for business registration"
-```
-
----
-
-## Task 12: Página /dashboard (empreendedor)
-
-**Files:**
-- Create: `app/dashboard/page.tsx`
-
-- [ ] **Step 1: Criar página**
+- [ ] **Step 2: Criar app/(main)/dashboard/page.tsx**
 
 ```tsx
-// app/dashboard/page.tsx
+// app/(main)/dashboard/page.tsx
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
@@ -1432,24 +1283,12 @@ import Link from "next/link"
 import { Plus, Clock, CheckCircle2, XCircle, ExternalLink } from "lucide-react"
 import type { BusinessStatus } from "@prisma/client"
 
-export const metadata = { title: "Meu painel — Empreende General" }
+export const metadata = { title: "Meu painel" }
 
-const statusConfig: Record<BusinessStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  PENDING: {
-    label: "Aguardando aprovação",
-    color: "bg-amber-50 text-amber-700 border-amber-200",
-    icon: <Clock size={13} />,
-  },
-  APPROVED: {
-    label: "Publicado",
-    color: "bg-green-50 text-green-700 border-green-200",
-    icon: <CheckCircle2 size={13} />,
-  },
-  REJECTED: {
-    label: "Reprovado",
-    color: "bg-red-50 text-red-700 border-red-200",
-    icon: <XCircle size={13} />,
-  },
+const statusConfig: Record<BusinessStatus, { label: string; color: string }> = {
+  PENDING: { label: "Aguardando aprovação", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  APPROVED: { label: "Publicado", color: "bg-green-50 text-green-700 border-green-200" },
+  REJECTED: { label: "Reprovado", color: "bg-red-50 text-red-700 border-red-200" },
 }
 
 interface PageProps {
@@ -1463,56 +1302,35 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const businesses = await prisma.business.findMany({
     where: { ownerId: session.user.id, deletedAt: null },
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-      rejectionReason: true,
-      createdAt: true,
-      category: { select: { name: true } },
-    },
+    select: { id: true, name: true, slug: true, status: true, rejectionReason: true, createdAt: true, category: { select: { name: true } } },
   })
 
   return (
     <div className="container max-w-3xl px-6 py-10">
-      {/* Toast de sucesso */}
       {searchParams.cadastro === "sucesso" && (
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 text-green-700 rounded-xl px-4 py-3 mb-6 text-sm">
           <CheckCircle2 size={16} className="shrink-0" />
-          Negócio cadastrado com sucesso! Nossa equipe irá revisar em breve.
+          Negócio cadastrado! Nossa equipe irá revisar em breve.
         </div>
       )}
 
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Meu painel</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Olá, {session.user.name?.split(" ")[0] ?? "empreendedor"}!
-          </p>
+          <p className="text-gray-500 text-sm mt-1">Olá, {session.user.name?.split(" ")[0] ?? "empreendedor"}!</p>
         </div>
-        <Link
-          href="/dashboard/new"
-          className="flex items-center gap-2 bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-blue-800 transition-colors"
-        >
+        <Link href="/dashboard/new" className="flex items-center gap-2 bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-blue-800 transition-colors">
           <Plus size={16} />
           Novo negócio
         </Link>
       </div>
 
-      {/* Lista de negócios */}
       {businesses.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-gray-200 rounded-2xl">
           <p className="text-4xl mb-4">🏪</p>
           <p className="font-semibold text-gray-700 mb-1">Nenhum negócio cadastrado</p>
-          <p className="text-sm text-gray-400 mb-6">
-            Cadastre seu empreendimento e comece a aparecer para a cidade.
-          </p>
-          <Link
-            href="/dashboard/new"
-            className="inline-flex items-center gap-2 bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-800"
-          >
+          <p className="text-sm text-gray-400 mb-6">Cadastre seu empreendimento e apareça no mapa da cidade.</p>
+          <Link href="/dashboard/new" className="inline-flex items-center gap-2 bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-800">
             <Plus size={15} />
             Cadastrar meu negócio
           </Link>
@@ -1526,35 +1344,24 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-gray-800">{b.name}</p>
-                    {b.category && (
-                      <p className="text-xs text-gray-400 mt-0.5">{b.category.name}</p>
-                    )}
+                    {b.category && <p className="text-xs text-gray-400 mt-0.5">{b.category.name}</p>}
                   </div>
                   <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${cfg.color} shrink-0`}>
-                    {cfg.icon}
                     {cfg.label}
                   </span>
                 </div>
 
-                {/* Motivo de rejeição */}
                 {b.status === "REJECTED" && b.rejectionReason && (
                   <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-sm text-red-700">
-                    <span className="font-medium">Motivo: </span>
-                    {b.rejectionReason}
+                    <span className="font-medium">Motivo: </span>{b.rejectionReason}
                   </div>
                 )}
 
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-gray-400">
-                    Cadastrado em {new Date(b.createdAt).toLocaleDateString("pt-BR")}
-                  </p>
+                  <p className="text-xs text-gray-400">Cadastrado em {new Date(b.createdAt).toLocaleDateString("pt-BR")}</p>
                   {b.status === "APPROVED" && (
-                    <Link
-                      href={`/businesses/${b.slug}`}
-                      className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
-                    >
-                      Ver página pública
-                      <ExternalLink size={11} />
+                    <Link href={`/businesses/${b.slug}`} className="flex items-center gap-1 text-xs text-blue-700 hover:underline">
+                      Ver no mapa / página <ExternalLink size={11} />
                     </Link>
                   )}
                 </div>
@@ -1568,27 +1375,39 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 }
 ```
 
-- [ ] **Step 2: Verificar build**
+- [ ] **Step 3: Atualizar middleware.ts para apontar para novos caminhos**
+
+Verificar que o middleware ainda protege as rotas — no Next.js App Router, route groups não alteram a URL pública, então `/dashboard` e `/admin` continuam sendo os paths corretos:
+
+```ts
+// middleware.ts — deve continuar assim (sem mudança necessária):
+export const config = {
+  matcher: ["/dashboard/:path*", "/admin/:path*"],
+}
+```
+
+- [ ] **Step 4: Verificar build**
 
 ```bash
 npx tsc --noEmit
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add app/dashboard/page.tsx
-git commit -m "feat: /dashboard page listing user businesses with status badges"
+git add "app/(main)/dashboard/"
+git commit -m "feat: /dashboard and /dashboard/new pages in (main) route group"
 ```
 
 ---
 
-## Task 13: Server Actions approveBusinessAction + rejectBusinessAction
+## Task 12: Server Actions admin + Painel /admin/businesses
 
 **Files:**
 - Create: `lib/actions/admin.ts`
+- Create: `app/(main)/admin/businesses/page.tsx`
 
-- [ ] **Step 1: Criar arquivo**
+- [ ] **Step 1: Criar lib/actions/admin.ts**
 
 ```ts
 // lib/actions/admin.ts
@@ -1603,9 +1422,7 @@ function isAdminRole(role: string) {
   return role === "ADMIN" || role === "SUPER_ADMIN"
 }
 
-export async function approveBusinessAction(
-  businessId: string
-): Promise<ActionResult> {
+export async function approveBusinessAction(businessId: string): Promise<ActionResult> {
   const session = await auth()
 
   if (!session?.user?.id || !isAdminRole(session.user.role)) {
@@ -1617,23 +1434,13 @@ export async function approveBusinessAction(
     include: { owner: { select: { id: true, role: true } } },
   })
 
-  if (!business) {
-    return { success: false, error: "Negócio não encontrado." }
-  }
+  if (!business) return { success: false, error: "Negócio não encontrado." }
 
   await prisma.$transaction(async (tx) => {
-    // Aprovar o negócio
-    await tx.business.update({
-      where: { id: businessId },
-      data: { status: "APPROVED" },
-    })
+    await tx.business.update({ where: { id: businessId }, data: { status: "APPROVED" } })
 
-    // Promover owner para ENTREPRENEUR se ainda for USER
     if (business.owner.role === "USER") {
-      await tx.user.update({
-        where: { id: business.owner.id },
-        data: { role: "ENTREPRENEUR" },
-      })
+      await tx.user.update({ where: { id: business.owner.id }, data: { role: "ENTREPRENEUR" } })
       await tx.entrepreneurProfile.upsert({
         where: { userId: business.owner.id },
         create: { userId: business.owner.id },
@@ -1641,13 +1448,8 @@ export async function approveBusinessAction(
       })
     }
 
-    // Log da ação
     await tx.adminAction.create({
-      data: {
-        adminId: session.user.id,
-        action: "APPROVE_BUSINESS",
-        targetId: businessId,
-      },
+      data: { adminId: session.user.id, action: "APPROVE_BUSINESS", targetId: businessId },
     })
   })
 
@@ -1659,10 +1461,7 @@ export async function approveBusinessAction(
   return { success: true, data: undefined }
 }
 
-export async function rejectBusinessAction(
-  businessId: string,
-  reason: string
-): Promise<ActionResult> {
+export async function rejectBusinessAction(businessId: string, reason: string): Promise<ActionResult> {
   const session = await auth()
 
   if (!session?.user?.id || !isAdminRole(session.user.role)) {
@@ -1678,9 +1477,7 @@ export async function rejectBusinessAction(
     select: { id: true },
   })
 
-  if (!business) {
-    return { success: false, error: "Negócio não encontrado." }
-  }
+  if (!business) return { success: false, error: "Negócio não encontrado." }
 
   await prisma.$transaction(async (tx) => {
     await tx.business.update({
@@ -1688,12 +1485,7 @@ export async function rejectBusinessAction(
       data: { status: "REJECTED", rejectionReason: reason.trim() },
     })
     await tx.adminAction.create({
-      data: {
-        adminId: session.user.id,
-        action: "REJECT_BUSINESS",
-        targetId: businessId,
-        reason: reason.trim(),
-      },
+      data: { adminId: session.user.id, action: "REJECT_BUSINESS", targetId: businessId, reason: reason.trim() },
     })
   })
 
@@ -1703,30 +1495,10 @@ export async function rejectBusinessAction(
 }
 ```
 
-- [ ] **Step 2: Verificar tipos**
-
-```bash
-npx tsc --noEmit
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add lib/actions/admin.ts
-git commit -m "feat: approveBusinessAction and rejectBusinessAction with ENTREPRENEUR promotion"
-```
-
----
-
-## Task 14: Painel admin /admin/businesses
-
-**Files:**
-- Create: `app/admin/businesses/page.tsx`
-
-- [ ] **Step 1: Criar página**
+- [ ] **Step 2: Criar app/(main)/admin/businesses/page.tsx**
 
 ```tsx
-// app/admin/businesses/page.tsx
+// app/(main)/admin/businesses/page.tsx
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
@@ -1754,11 +1526,9 @@ interface PageProps {
 
 export default async function AdminBusinessesPage({ searchParams }: PageProps) {
   const session = await auth()
-
   const role = session?.user?.role
-  if (!role || (role !== "ADMIN" && role !== "SUPER_ADMIN")) {
-    redirect("/")
-  }
+
+  if (!role || (role !== "ADMIN" && role !== "SUPER_ADMIN")) redirect("/")
 
   const filterStatus = (searchParams.status as BusinessStatus) ?? "PENDING"
 
@@ -1778,16 +1548,13 @@ export default async function AdminBusinessesPage({ searchParams }: PageProps) {
         <p className="text-gray-500 text-sm">Revisar, aprovar e rejeitar cadastros.</p>
       </div>
 
-      {/* Filtros de status */}
       <div className="flex gap-2 mb-6">
         {(["PENDING", "APPROVED", "REJECTED"] as BusinessStatus[]).map((s) => (
           <a
             key={s}
             href={`/admin/businesses?status=${s}`}
             className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              filterStatus === s
-                ? "bg-blue-700 text-white border-blue-700"
-                : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+              filterStatus === s ? "bg-blue-700 text-white border-blue-700" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
             }`}
           >
             {statusLabels[s]}
@@ -1808,18 +1575,10 @@ export default async function AdminBusinessesPage({ searchParams }: PageProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="font-semibold text-gray-800">{b.name}</h2>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${statusColors[b.status]}`}>
-                      {statusLabels[b.status]}
-                    </span>
-                    {b.category && (
-                      <span className="text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
-                        {b.category.name}
-                      </span>
-                    )}
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${statusColors[b.status]}`}>{statusLabels[b.status]}</span>
+                    {b.category && <span className="text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">{b.category.name}</span>}
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {b.owner.name} · {b.owner.email}
-                  </p>
+                  <p className="text-sm text-gray-500 mt-1">{b.owner.name} · {b.owner.email}</p>
                   {b.address && (
                     <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                       <MapPin size={11} />
@@ -1836,35 +1595,46 @@ export default async function AdminBusinessesPage({ searchParams }: PageProps) {
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">{b.description}</p>
               )}
 
-              {/* Ações (apenas em PENDING) */}
               {b.status === "PENDING" && (
                 <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-gray-100">
-                  {/* Aprovar */}
                   <form
                     action={async () => {
                       "use server"
                       await approveBusinessAction(b.id)
                     }}
                   >
-                    <button
-                      type="submit"
-                      className="flex items-center gap-2 bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-green-700 transition-colors"
-                    >
+                    <button type="submit" className="flex items-center gap-2 bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-green-700 transition-colors">
                       <CheckCircle2 size={15} />
                       Aprovar
                     </button>
                   </form>
 
-                  {/* Rejeitar */}
-                  <RejectForm businessId={b.id} />
+                  <form
+                    action={async (formData: FormData) => {
+                      "use server"
+                      const reason = formData.get("reason") as string
+                      await rejectBusinessAction(b.id, reason)
+                    }}
+                    className="flex flex-1 gap-2"
+                  >
+                    <input
+                      name="reason"
+                      required
+                      minLength={10}
+                      placeholder="Motivo da rejeição (obrigatório)"
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-400 min-w-0"
+                    />
+                    <button type="submit" className="flex items-center gap-2 bg-white border border-red-200 text-red-600 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-red-50 transition-colors shrink-0">
+                      <XCircle size={15} />
+                      Rejeitar
+                    </button>
+                  </form>
                 </div>
               )}
 
-              {/* Motivo de rejeição */}
               {b.status === "REJECTED" && b.rejectionReason && (
                 <div className="mt-3 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-sm text-red-700">
-                  <span className="font-medium">Motivo: </span>
-                  {b.rejectionReason}
+                  <span className="font-medium">Motivo: </span>{b.rejectionReason}
                 </div>
               )}
             </div>
@@ -1874,141 +1644,769 @@ export default async function AdminBusinessesPage({ searchParams }: PageProps) {
     </div>
   )
 }
-
-// Sub-componente inline para o form de rejeição (client)
-function RejectForm({ businessId }: { businessId: string }) {
-  return (
-    <form
-      action={async (formData: FormData) => {
-        "use server"
-        const reason = formData.get("reason") as string
-        await rejectBusinessAction(businessId, reason)
-      }}
-      className="flex flex-1 gap-2"
-    >
-      <input
-        name="reason"
-        required
-        minLength={10}
-        placeholder="Motivo da rejeição (obrigatório)"
-        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-400 min-w-0"
-      />
-      <button
-        type="submit"
-        className="flex items-center gap-2 bg-white border border-red-200 text-red-600 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-red-50 transition-colors shrink-0"
-      >
-        <XCircle size={15} />
-        Rejeitar
-      </button>
-    </form>
-  )
-}
 ```
 
-- [ ] **Step 2: Verificar build completo**
+- [ ] **Step 3: Verificar build**
 
 ```bash
-npm run build
+npm run build 2>&1 | tail -20
 ```
 
-Saída esperada: build completo sem erros de TypeScript ou linting.
-
-- [ ] **Step 3: Commit final do sprint**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add app/admin/businesses/page.tsx
-git commit -m "feat: admin panel /admin/businesses with approve and reject actions"
+git add lib/actions/admin.ts "app/(main)/admin/"
+git commit -m "feat: admin Server Actions and /admin/businesses panel"
 ```
 
 ---
 
-## Task 15: Teste ponta a ponta do fluxo
+## Task 13: Instalar Leaflet + React-Leaflet
 
-- [ ] **Step 1: Iniciar servidor de desenvolvimento**
+**Files:**
+- `package.json` (via npm install)
+- `app/globals.css` (CSS fix Leaflet)
+
+- [ ] **Step 1: Instalar dependências**
 
 ```bash
-npm run dev
+npm install leaflet react-leaflet
+npm install --save-dev @types/leaflet
 ```
 
-- [ ] **Step 2: Verificar variáveis de ambiente**
+- [ ] **Step 2: Adicionar CSS do Leaflet ao globals.css**
 
-Confirmar que `.env.local` contém:
+Abrir `app/globals.css` e adicionar no topo:
+
+```css
+@import 'leaflet/dist/leaflet.css';
 ```
+
+Nota: Leaflet precisa do CSS para renderizar corretamente os tiles e controles.
+
+- [ ] **Step 3: Verificar que o build não quebra**
+
+```bash
+npx tsc --noEmit
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add package.json package-lock.json app/globals.css
+git commit -m "feat: install react-leaflet and leaflet, add CSS"
+```
+
+---
+
+## Task 14: Componentes de mapa — MapView, BusinessMapCard, MapOverlayHeader
+
+**Files:**
+- Create: `components/map/MapView.tsx`
+- Create: `components/map/BusinessMapCard.tsx`
+- Create: `components/map/MapOverlayHeader.tsx`
+
+> Contexto: Leaflet NÃO funciona com SSR. MapView DEVE ser carregado com `dynamic(..., { ssr: false })`. O componente pai (homepage) faz o dynamic import.
+
+- [ ] **Step 1: Criar components/map/MapView.tsx**
+
+```tsx
+// components/map/MapView.tsx
+// ATENÇÃO: este arquivo deve ser importado apenas via dynamic() com ssr: false
+"use client"
+
+import { useEffect, useRef } from "react"
+import L from "leaflet"
+import type { BusinessMapPin } from "@/types"
+
+// Corrige ícone padrão quebrado do Leaflet com webpack
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+})
+
+const CATEGORY_CONFIG: Record<string, { emoji: string; color: string }> = {
+  alimentacao:  { emoji: "🍽️", color: "#f97316" },
+  beleza:       { emoji: "💅", color: "#ec4899" },
+  comercio:     { emoji: "🛍️", color: "#3b82f6" },
+  servicos:     { emoji: "🔧", color: "#6b7280" },
+  agro:         { emoji: "🌾", color: "#22c55e" },
+  saude:        { emoji: "❤️", color: "#ef4444" },
+  default:      { emoji: "📍", color: "#1d4ed8" },
+}
+
+function getCategoryConfig(slug?: string | null) {
+  if (!slug) return CATEGORY_CONFIG.default
+  return CATEGORY_CONFIG[slug] ?? CATEGORY_CONFIG.default
+}
+
+function createBusinessIcon(pin: BusinessMapPin): L.DivIcon {
+  const cfg = getCategoryConfig(pin.category?.slug)
+  const size = pin.featured ? 44 : 36
+  const border = pin.featured ? "3px solid #eab308" : "2px solid white"
+  const shadow = pin.featured ? "0 2px 8px rgba(0,0,0,0.35)" : "0 1px 4px rgba(0,0,0,0.2)"
+
+  return L.divIcon({
+    html: `
+      <div style="
+        width:${size}px;height:${size}px;
+        background:${cfg.color};
+        border:${border};
+        border-radius:50% 50% 50% 0;
+        transform:rotate(-45deg);
+        box-shadow:${shadow};
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <span style="transform:rotate(45deg);font-size:${pin.featured ? 18 : 15}px;line-height:1">
+          ${cfg.emoji}
+        </span>
+      </div>
+    `,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+  })
+}
+
+interface Props {
+  businesses: BusinessMapPin[]
+  userLocation: { lat: number; lng: number } | null
+  selectedId: string | null
+  onSelectBusiness: (pin: BusinessMapPin | null) => void
+  categoryFilter: string | null
+  searchQuery: string
+}
+
+// General Sampaio, CE
+const DEFAULT_CENTER: [number, number] = [-3.754, -39.453]
+const DEFAULT_ZOOM = 14
+
+export function MapView({ businesses, userLocation, selectedId, onSelectBusiness, categoryFilter, searchQuery }: Props) {
+  const mapRef = useRef<L.Map | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const markersRef = useRef<Map<string, L.Marker>>(new Map())
+
+  const filtered = businesses.filter((b) => {
+    if (categoryFilter && b.category?.slug !== categoryFilter) return false
+    if (searchQuery && !b.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
+    return true
+  })
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return
+
+    const map = L.map(containerRef.current, {
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
+      zoomControl: true,
+    })
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map)
+
+    mapRef.current = map
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    // Remover markers antigos
+    markersRef.current.forEach((m) => m.remove())
+    markersRef.current.clear()
+
+    // Adicionar markers filtrados
+    filtered.forEach((pin) => {
+      if (pin.latitude === null || pin.longitude === null) return
+
+      const marker = L.marker([pin.latitude, pin.longitude], {
+        icon: createBusinessIcon(pin),
+      })
+
+      marker.on("click", () => onSelectBusiness(pin))
+      marker.addTo(map)
+      markersRef.current.set(pin.id, marker)
+    })
+  }, [filtered, onSelectBusiness])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !userLocation) return
+
+    const userIcon = L.divIcon({
+      html: `<div style="width:14px;height:14px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(59,130,246,0.3)"></div>`,
+      className: "",
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    })
+
+    const marker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+      .addTo(map)
+      .bindPopup("Você está aqui")
+
+    map.setView([userLocation.lat, userLocation.lng], 15)
+
+    return () => { marker.remove() }
+  }, [userLocation])
+
+  return (
+    <div ref={containerRef} className="w-full h-full" />
+  )
+}
+```
+
+- [ ] **Step 2: Criar components/map/BusinessMapCard.tsx**
+
+```tsx
+// components/map/BusinessMapCard.tsx
+"use client"
+
+import Link from "next/link"
+import { X, Phone, MessageCircle, MapPin, Navigation, ExternalLink } from "lucide-react"
+import type { BusinessMapPin } from "@/types"
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`
+  return `${km.toFixed(1).replace(".", ",")} km`
+}
+
+interface Props {
+  business: BusinessMapPin
+  userLocation: { lat: number; lng: number } | null
+  onClose: () => void
+}
+
+export function BusinessMapCard({ business, userLocation, onClose }: Props) {
+  const distance =
+    userLocation
+      ? haversineKm(userLocation.lat, userLocation.lng, business.latitude, business.longitude)
+      : null
+
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${business.latitude},${business.longitude}`
+  const whatsappUrl = business.whatsapp
+    ? `https://wa.me/${business.whatsapp.replace(/\D/g, "")}`
+    : null
+
+  return (
+    <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 md:bottom-8 md:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-[1000] overflow-hidden">
+      {/* Header do card */}
+      <div className="flex items-start justify-between p-4 pb-3">
+        <div className="flex-1 min-w-0">
+          {business.category && (
+            <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+              {business.category.name}
+            </span>
+          )}
+          <h3 className="font-bold text-gray-800 text-base mt-1 truncate">{business.name}</h3>
+          <div className="flex items-center gap-3 mt-1">
+            {distance !== null && (
+              <span className="flex items-center gap-1 text-xs text-gray-500">
+                <Navigation size={11} className="text-blue-500" />
+                {formatDistance(distance)}
+              </span>
+            )}
+            {business.address && (
+              <span className="flex items-center gap-1 text-xs text-gray-400 truncate">
+                <MapPin size={11} />
+                {business.address}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors ml-2 shrink-0"
+        >
+          <X size={16} className="text-gray-400" />
+        </button>
+      </div>
+
+      {/* Ações */}
+      <div className="flex items-center gap-2 px-4 pb-4">
+        {whatsappUrl && (
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-green-500 text-white text-sm font-semibold px-3 py-2 rounded-xl hover:bg-green-600 transition-colors"
+          >
+            <MessageCircle size={15} />
+            WhatsApp
+          </a>
+        )}
+        {business.phone && !whatsappUrl && (
+          <a
+            href={`tel:${business.phone}`}
+            className="flex items-center gap-2 bg-blue-50 text-blue-700 text-sm font-semibold px-3 py-2 rounded-xl hover:bg-blue-100 transition-colors"
+          >
+            <Phone size={15} />
+            Ligar
+          </a>
+        )}
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+        >
+          <MapPin size={15} />
+          Rota
+        </a>
+        <Link
+          href={`/businesses/${business.slug}`}
+          className="flex items-center gap-1.5 text-sm font-medium text-blue-700 bg-blue-50 px-3 py-2 rounded-xl hover:bg-blue-100 transition-colors ml-auto"
+        >
+          Ver detalhes
+          <ExternalLink size={13} />
+        </Link>
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Criar components/map/MapOverlayHeader.tsx**
+
+```tsx
+// components/map/MapOverlayHeader.tsx
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { Search, Plus, User, X } from "lucide-react"
+import type { Category } from "@prisma/client"
+
+interface Props {
+  slogan: string
+  appName: string
+  categories: Pick<Category, "id" | "name" | "slug">[]
+  isAuthenticated: boolean
+  categoryFilter: string | null
+  onCategoryFilter: (slug: string | null) => void
+  searchQuery: string
+  onSearchChange: (q: string) => void
+}
+
+export function MapOverlayHeader({
+  slogan,
+  appName,
+  categories,
+  isAuthenticated,
+  categoryFilter,
+  onCategoryFilter,
+  searchQuery,
+  onSearchChange,
+}: Props) {
+  const [searchFocused, setSearchFocused] = useState(false)
+
+  return (
+    <div className="absolute top-0 left-0 right-0 z-[500] pointer-events-none">
+      {/* Gradiente superior para legibilidade */}
+      <div className="h-48 bg-gradient-to-b from-black/40 to-transparent" />
+
+      {/* Conteúdo — pointer-events-auto para ser clicável */}
+      <div className="absolute top-0 left-0 right-0 px-4 pt-4 pb-3 flex flex-col gap-3 pointer-events-auto">
+        {/* Linha 1: marca + ações */}
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-white font-bold text-lg leading-tight">{appName}</span>
+            {slogan && (
+              <p className="text-white/80 text-xs leading-tight">{slogan}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/new"
+              className="flex items-center gap-1.5 bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-lg"
+            >
+              <Plus size={14} />
+              Cadastrar
+            </Link>
+            <Link
+              href={isAuthenticated ? "/dashboard" : "/login"}
+              className="w-9 h-9 bg-white/20 backdrop-blur-sm text-white rounded-xl flex items-center justify-center hover:bg-white/30 transition-colors shadow-lg"
+            >
+              <User size={16} />
+            </Link>
+          </div>
+        </div>
+
+        {/* Linha 2: busca */}
+        <div className="relative">
+          <div className="flex items-center gap-2 bg-white rounded-xl px-4 py-3 shadow-lg">
+            <Search size={16} className="text-gray-400 shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder="Buscar negócios na cidade..."
+              className="flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+            />
+            {searchQuery && (
+              <button onClick={() => onSearchChange("")} className="text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Linha 3: filtros por categoria */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <button
+            onClick={() => onCategoryFilter(null)}
+            className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors shadow-sm ${
+              !categoryFilter
+                ? "bg-blue-600 text-white"
+                : "bg-white/90 text-gray-700 hover:bg-white"
+            }`}
+          >
+            Todos
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => onCategoryFilter(categoryFilter === cat.slug ? null : cat.slug)}
+              className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors shadow-sm ${
+                categoryFilter === cat.slug
+                  ? "bg-blue-600 text-white"
+                  : "bg-white/90 text-gray-700 hover:bg-white"
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 4: Verificar tipos**
+
+```bash
+npx tsc --noEmit
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/map/
+git commit -m "feat: MapView (Leaflet), BusinessMapCard, MapOverlayHeader components"
+```
+
+---
+
+## Task 15: Homepage map-first — redesign de app/page.tsx
+
+**Files:**
+- Modify: `app/page.tsx`
+
+> A homepage é um Server Component que busca dados e passa para componentes client. O MapView é carregado com `dynamic(..., { ssr: false })` pois Leaflet não funciona em SSR.
+
+- [ ] **Step 1: Reescrever app/page.tsx**
+
+```tsx
+// app/page.tsx
+export const dynamic = "force-dynamic"
+
+import dynamic from "next/dynamic"
+import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
+import { APP_CONFIG } from "@/config"
+import type { BusinessMapPin } from "@/types"
+
+// Carregado client-side apenas — Leaflet não suporta SSR
+const MapCanvas = dynamic(
+  () => import("@/components/map/MapCanvas"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Carregando mapa...</p>
+        </div>
+      </div>
+    ),
+  }
+)
+
+export default async function HomePage() {
+  const [session, businesses, categories] = await Promise.all([
+    auth(),
+    prisma.business.findMany({
+      where: {
+        status: "APPROVED",
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        latitude: true,
+        longitude: true,
+        featured: true,
+        phone: true,
+        whatsapp: true,
+        address: true,
+        category: { select: { name: true, slug: true, icon: true } },
+      },
+    }),
+    prisma.category.findMany({ orderBy: { name: "asc" } }),
+  ])
+
+  const pins = businesses as unknown as BusinessMapPin[]
+
+  return (
+    <div style={{ width: "100dvw", height: "100dvh", position: "relative", overflow: "hidden" }}>
+      <MapCanvas
+        businesses={pins}
+        categories={categories}
+        isAuthenticated={!!session?.user}
+        appName={APP_CONFIG.name}
+        slogan={process.env.NEXT_PUBLIC_SLOGAN ?? ""}
+      />
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Criar components/map/MapCanvas.tsx (orquestrador client)**
+
+```tsx
+// components/map/MapCanvas.tsx
+// Orquestrador client — gerencia estado do mapa, localização, seleção, filtros
+"use client"
+
+import { useState, useCallback } from "react"
+import { MapPin } from "lucide-react"
+import { MapView } from "./MapView"
+import { BusinessMapCard } from "./BusinessMapCard"
+import { MapOverlayHeader } from "./MapOverlayHeader"
+import type { BusinessMapPin } from "@/types"
+import type { Category } from "@prisma/client"
+
+interface Props {
+  businesses: BusinessMapPin[]
+  categories: Pick<Category, "id" | "name" | "slug">[]
+  isAuthenticated: boolean
+  appName: string
+  slogan: string
+}
+
+export default function MapCanvas({ businesses, categories, isAuthenticated, appName, slogan }: Props) {
+  const [selectedBusiness, setSelectedBusiness] = useState<BusinessMapPin | null>(null)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationError, setLocationError] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const handleSelectBusiness = useCallback((pin: BusinessMapPin | null) => {
+    setSelectedBusiness(pin)
+  }, [])
+
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setLocationError(true)
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setLocationError(false)
+      },
+      () => setLocationError(true),
+      { timeout: 10000 }
+    )
+  }
+
+  return (
+    <>
+      {/* Mapa Leaflet — ocupa tudo */}
+      <MapView
+        businesses={businesses}
+        userLocation={userLocation}
+        selectedId={selectedBusiness?.id ?? null}
+        onSelectBusiness={handleSelectBusiness}
+        categoryFilter={categoryFilter}
+        searchQuery={searchQuery}
+      />
+
+      {/* Overlays sobre o mapa */}
+      <MapOverlayHeader
+        appName={appName}
+        slogan={slogan}
+        categories={categories}
+        isAuthenticated={isAuthenticated}
+        categoryFilter={categoryFilter}
+        onCategoryFilter={setCategoryFilter}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+      />
+
+      {/* Botão de localização — FAB inferior esquerdo */}
+      <button
+        onClick={requestLocation}
+        title={locationError ? "Localização não disponível" : "Usar minha localização"}
+        className={`absolute bottom-6 left-4 z-[500] flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg transition-colors ${
+          userLocation
+            ? "bg-blue-600 text-white"
+            : locationError
+            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+            : "bg-white text-gray-700 hover:bg-gray-50"
+        }`}
+      >
+        <MapPin size={16} className={userLocation ? "text-white" : "text-blue-600"} />
+        {userLocation ? "Localização ativa" : "Usar minha localização"}
+      </button>
+
+      {/* Card do negócio selecionado */}
+      {selectedBusiness && (
+        <BusinessMapCard
+          business={selectedBusiness}
+          userLocation={userLocation}
+          onClose={() => setSelectedBusiness(null)}
+        />
+      )}
+    </>
+  )
+}
+```
+
+- [ ] **Step 3: Verificar tipos e build**
+
+```bash
+npx tsc --noEmit
+npm run build 2>&1 | tail -30
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/page.tsx components/map/MapCanvas.tsx
+git commit -m "feat: map-first homepage with Leaflet, overlays, business pins and location"
+```
+
+---
+
+## Task 16: Teste ponta a ponta do primeiro loop de valor
+
+> Pré-requisito: banco de dados acessível e migration rodada (Task 1).
+
+- [ ] **Step 1: Confirmar variáveis de ambiente em .env.local**
+
+```env
 DATABASE_URL=postgresql://...
 NEXTAUTH_SECRET=...
 NEXTAUTH_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-GOOGLE_MAPS_API_KEY=...
 ADMIN_EMAILS=seuemail@gmail.com
+NEXT_PUBLIC_SLOGAN=Mapa vivo da economia local
 ```
 
-- [ ] **Step 3: Testar login**
+- [ ] **Step 2: Rodar migration (se ainda pendente)**
 
-1. Acessar `http://localhost:3000/login`
-2. Clicar "Entrar com Google"
-3. Autenticar com o e-mail que está em `ADMIN_EMAILS`
-4. Verificar redirecionamento para `/dashboard`
-5. Verificar que o Header mostra o avatar e nome do usuário
+```bash
+npx prisma migrate dev --name add-super-admin-entrepreneur-profile-admin-action-hours
+npx prisma generate
+```
 
-- [ ] **Step 4: Verificar promoção a SUPER_ADMIN**
+- [ ] **Step 3: Iniciar servidor**
 
-No banco (via Prisma Studio ou query):
+```bash
+npm run dev
+```
+
+- [ ] **Step 4: Verificar homepage**
+
+Acessar `http://localhost:3000` — deve abrir o mapa de General Sampaio. Header com marca, busca e filtros visíveis sobre o mapa. Botão "Usar minha localização" visível.
+
+- [ ] **Step 5: Login Google**
+
+1. Clicar em "Entrar" no overlay
+2. Redireciona para `http://localhost:3000/login`
+3. Clicar "Entrar com Google"
+4. Autenticar com e-mail que está em `ADMIN_EMAILS`
+5. Redirecionar para `/dashboard`
+
+- [ ] **Step 6: Verificar promoção SUPER_ADMIN**
 
 ```bash
 npx prisma studio
 ```
 
-Verificar que o usuário tem `role = "SUPER_ADMIN"`.
+Usuário deve ter `role = "SUPER_ADMIN"`.
 
-- [ ] **Step 5: Cadastrar um negócio**
+- [ ] **Step 7: Cadastrar negócio**
 
-1. Clicar "Novo negócio" no dashboard
-2. Preencher nome, categoria, descrição
-3. Preencher contato (telefone, WhatsApp)
-4. Na seção de localização: digitar "Rua Principal, General Sampaio, CE" e clicar "Buscar endereço"
-5. Confirmar localização no mapa
-6. Clicar "Cadastrar negócio"
-7. Verificar redirecionamento para `/dashboard?cadastro=sucesso`
-8. Verificar toast de sucesso e negócio listado com status "Aguardando aprovação"
+1. Clicar "Novo negócio"
+2. Preencher formulário com localização via Nominatim
+3. Confirmar localização no mapa OSM
+4. Submeter → redirecionar para `/dashboard?cadastro=sucesso`
+5. Negócio aparece com badge "Aguardando aprovação"
 
-- [ ] **Step 6: Verificar que negócio NÃO aparece publicamente**
+- [ ] **Step 8: Verificar que negócio não aparece no mapa**
 
-Acessar `http://localhost:3000/businesses` — negócio não deve aparecer (status PENDING).
+Voltar para `http://localhost:3000` — pin não deve aparecer (status PENDING).
 
-- [ ] **Step 7: Aprovar o negócio como admin**
+- [ ] **Step 9: Aprovar como admin**
 
 1. Acessar `http://localhost:3000/admin/businesses`
-2. Verificar negócio listado como PENDING
+2. Negócio listado como PENDING
 3. Clicar "Aprovar"
-4. Verificar que negócio some da lista PENDING
 
-- [ ] **Step 8: Verificar publicação**
+- [ ] **Step 10: Verificar pin no mapa**
 
-1. Acessar `http://localhost:3000/businesses`
-2. Negócio deve aparecer na listagem
-3. Clicar no negócio — página individual deve carregar corretamente
+Voltar para `http://localhost:3000` (ou recarregar) — pin do negócio deve aparecer no mapa. Clicar no pin → `BusinessMapCard` com nome, categoria, WhatsApp e "Ver detalhes".
 
-- [ ] **Step 9: Testar rejeição (com segundo usuário ou negócio novo)**
+- [ ] **Step 11: Verificar build de produção**
 
-1. Cadastrar outro negócio de teste
-2. No painel admin, preencher o campo de motivo e clicar "Rejeitar"
-3. Verificar negócio aparece em `/admin/businesses?status=REJECTED`
-4. Logar com outro usuário (o dono do negócio rejeitado) e verificar que o motivo aparece no `/dashboard`
+```bash
+npm run build
+```
+
+Saída esperada: sem erros.
 
 ---
 
-## Checklist de verificação final
+## Checklist final
 
+- [ ] Schema migrado com SUPER_ADMIN, EntrepreneurProfile, AdminAction, hours, rejectionReason
+- [ ] Geocodificação via Nominatim (sem API key)
+- [ ] Login Google funcionando, promoção SUPER_ADMIN
+- [ ] Header dinâmico (autenticado/não autenticado)
+- [ ] Formulário de negócio com LocationPicker OSM, lat/lng obrigatórios
+- [ ] `createBusinessAction` gera slug `padaria-do-ze`, `padaria-do-ze-2`...
+- [ ] Negócio PENDING não aparece no mapa nem na lista
+- [ ] Admin aprova → negócio aparece no mapa como pin
+- [ ] Admin rejeita → `rejectionReason` salvo e exibido no dashboard
+- [ ] Promoção a ENTREPRENEUR + criação de EntrepreneurProfile na aprovação
+- [ ] Homepage map-first com Leaflet, pins por categoria, destaque visual
+- [ ] BusinessMapCard com distância (quando localização disponível)
+- [ ] Localização do usuário opcional, sem rastreamento em segundo plano
 - [ ] `npm run build` sem erros
-- [ ] `npx tsc --noEmit` sem erros
-- [ ] Login Google funcionando
-- [ ] Promoção SUPER_ADMIN via ADMIN_EMAILS
-- [ ] Header mostra estado de autenticação
-- [ ] Formulário bloqueia submit sem localização confirmada
-- [ ] Negócio criado com `status: "PENDING"`
-- [ ] Negócio PENDING não aparece em `/businesses`
-- [ ] Painel admin acessível apenas por ADMIN/SUPER_ADMIN
-- [ ] Aprovação promove usuário para ENTREPRENEUR e cria EntrepreneurProfile
-- [ ] Rejeição salva `rejectionReason` e mostra no dashboard do empreendedor
-- [ ] Log em `AdminAction` para aprovações e rejeições

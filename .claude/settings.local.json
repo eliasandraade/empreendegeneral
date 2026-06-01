@@ -8,7 +8,8 @@
       "Bash(rsync -a --exclude='node_modules' --exclude='.git' /tmp/empreende-tmp/ /c/Users/Elias/Documents/Prefeitura/empreende-general/)",
       "Bash(npm install:*)",
       "Bash(openssl rand:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('dependencies',{}\\), indent=2\\)\\)\")"
     ]
   }
 }
