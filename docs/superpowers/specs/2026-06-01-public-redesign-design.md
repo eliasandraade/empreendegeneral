@@ -182,6 +182,7 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 - Nome: `text-white font-bold text-sm`
 - Endereço: `text-white/50 text-xs` com ícone `MapPin` mini
 - Distância: `"• 850 m"` ou `"• 1,2 km"` — ocultar se localização não disponível
+  - **Implementação:** distância requer geolocalização client-side. Extrair um componente `BusinessCardDistance` com `"use client"` que lê coordenadas do negócio e calcula via Haversine. O card pai (`BusinessCard`) permanece Server Component; `BusinessCardDistance` é filho client.
 - Estrelas + contagem: `text-yellow-400 text-xs`
 - `ChevronRight` no canto direito: reforço visual, não único ponto clicável
 
@@ -220,11 +221,12 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 1. **Sobre:** `text-white/70 text-sm leading-relaxed`
 2. **Informações:** grid `2×2` de cards `bg-white/5 rounded-xl p-3` (endereço, telefone, horário, site)
 3. **Mini mapa:** OpenStreetMap embutido, pin do negócio, `h-[200px] rounded-2xl`, botão "Abrir rota"
+   - **Implementação:** componente `MiniMap` importado via `dynamic(() => import(...), { ssr: false })`, igual ao `MapCanvas`. Recebe `lat`, `lng` e `name`. Zoom fixo `15`, interação desabilitada (`dragging: false`, `zoomControl: false`).
 4. **Galeria:** grid 2 colunas de thumbnails `rounded-xl`, primeira imagem maior se `isPrimary`
 5. **Avaliações:** título `"Avaliações (N)"` + cards `bg-white/5 rounded-xl p-4`
    - Avatar circular com inicial, nome, data, estrelas
    - Comentário `text-white/70`
-   - Resposta do empreendedor: `border-l-2 border-blue-400/40 pl-3 bg-white/3 rounded-r-xl`
+   - Resposta do empreendedor: `border-l-2 border-blue-400/40 pl-3 bg-white/5 rounded-r-xl`
 
 **Estado vazio avaliações:** ícone `Star` Lucide + texto encorajador (sem emojis)
 
