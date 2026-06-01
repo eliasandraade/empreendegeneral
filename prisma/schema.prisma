@@ -16,6 +16,7 @@ enum UserRole {
   USER
   ENTREPRENEUR
   ADMIN
+  SUPER_ADMIN
 }
 
 enum BusinessStatus {
@@ -92,6 +93,9 @@ model User {
   reviews    Review[]
   favorites  Favorite[]
   reports    Report[]
+
+  entrepreneurProfile EntrepreneurProfile?
+  adminActions        AdminAction[]
 }
 
 // ─── Categoria ────────────────────────────────────────────
@@ -143,6 +147,11 @@ model Business {
   // Destaque na home
   featured Boolean @default(false)
 
+  // Motivo de rejeição (preenchido pelo admin ao rejeitar)
+  rejectionReason String? @db.Text
+  // Horário de funcionamento em texto livre
+  hours           String?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? // soft delete
@@ -152,6 +161,29 @@ model Business {
   favorites  Favorite[]
   highlights Highlight[]
   reports    Report[]
+}
+
+// ─── Perfil do empreendedor ──────────────────────────────
+
+model EntrepreneurProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio       String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Ação administrativa ──────────────────────────────────
+
+model AdminAction {
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String   // "APPROVE_BUSINESS" | "REJECT_BUSINESS"
+  targetId  String   // ID do negócio alvo
+  reason    String?  @db.Text
+  createdAt DateTime @default(now())
 }
 
 // ─── Imagem do negócio ───────────────────────────────────
