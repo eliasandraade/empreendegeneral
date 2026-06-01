@@ -16,8 +16,16 @@ export const createBusinessSchema = z.object({
   city: z.string().max(100).optional(),
   state: z.string().length(2, "UF deve ter 2 caracteres").optional(),
   zipCode: z.string().max(9).optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  hours: z.string().max(200).optional(),
+  formattedAddress: z.string().max(300).optional(),
+  latitude: z.coerce
+    .number({ invalid_type_error: "Localização obrigatória" })
+    .min(-90)
+    .max(90),
+  longitude: z.coerce
+    .number({ invalid_type_error: "Localização obrigatória" })
+    .min(-180)
+    .max(180),
 })
 
 export type CreateBusinessInput = z.infer<typeof createBusinessSchema>
