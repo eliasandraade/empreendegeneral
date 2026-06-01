@@ -2,15 +2,16 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
-import { Search } from "lucide-react"
+import { Search, SearchX, Map } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { BusinessCard } from "@/components/businesses/BusinessCard"
+import { CategoryIcon } from "@/components/ui/CategoryIcon"
 
 interface PageProps {
   searchParams: { q?: string; categoria?: string }
 }
 
-export const metadata = { title: "Negócios" }
+export const metadata = { title: "Negócios — Empreende General" }
 
 export default async function BusinessesPage({ searchParams }: PageProps) {
   const { q, categoria } = searchParams
@@ -34,101 +35,117 @@ export default async function BusinessesPage({ searchParams }: PageProps) {
         images: { where: { isPrimary: true }, take: 1 },
         _count: { select: { reviews: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ featured: "desc" }, { createdAt: "desc" }],
     }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
   ])
 
+  const activeCategory = categories.find((c) => c.slug === categoria)
+
   return (
-    <div className="container py-10 px-6">
-      {/* Cabeçalho */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">Negócios</h1>
-        <p className="text-gray-500 text-sm">
-          Encontre empreendedores locais de General Sampaio
-        </p>
-      </div>
+    <div className="min-h-screen bg-[#0c1b2e]">
+      <div className="container py-8 px-4 max-w-2xl mx-auto">
 
-      {/* Busca */}
-      <form method="get" className="flex gap-2 mb-6 max-w-xl">
-        <div className="flex-1 flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <Search size={16} className="text-gray-400 shrink-0" />
-          <input
-            name="q"
-            type="text"
-            defaultValue={q}
-            placeholder="Buscar negócios..."
-            className="flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
-          />
-          {/* Preserva o filtro de categoria ao buscar */}
-          {categoria && <input type="hidden" name="categoria" value={categoria} />}
-        </div>
-        <button
-          type="submit"
-          className="bg-blue-700 text-white text-sm font-semibold px-5 py-3 rounded-xl hover:bg-blue-800 transition-colors shrink-0"
-        >
-          Buscar
-        </button>
-      </form>
-
-      {/* Filtros por categoria */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        <Link
-          href="/businesses"
-          className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-            !categoria
-              ? "bg-blue-700 text-white border-blue-700"
-              : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-          }`}
-        >
-          Todos
-        </Link>
-        {categories.map((cat) => (
+        {/* Cabeçalho da página */}
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-white font-black text-2xl leading-tight">
+              Negócios em<br />General Sampaio
+            </h1>
+            <p className="text-white/50 text-sm mt-1">
+              Descubra empreendedores locais
+            </p>
+          </div>
           <Link
-            key={cat.id}
-            href={`/businesses?categoria=${cat.slug}${q ? `&q=${q}` : ""}`}
-            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              categoria === cat.slug
-                ? "bg-blue-700 text-white border-blue-700"
-                : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+            href="/"
+            aria-label="Ver negócios no mapa"
+            className="flex items-center gap-1.5 text-xs font-semibold text-blue-300 bg-white/[0.08] border border-white/10 px-3 py-2 rounded-xl hover:bg-white/[0.14] transition-colors shrink-0 mt-1"
+          >
+            <Map size={13} aria-hidden="true" />
+            Ver no mapa
+          </Link>
+        </div>
+
+        {/* Busca */}
+        <form method="get" className="mb-4">
+          <div className="flex items-center gap-2 bg-white/[0.08] border border-white/[0.12] backdrop-blur-sm rounded-2xl px-4 py-3 focus-within:ring-2 focus-within:ring-blue-400/30 transition-all">
+            <Search size={16} className="text-white/40 shrink-0" aria-hidden="true" />
+            <input
+              name="q"
+              type="text"
+              defaultValue={q}
+              placeholder="Buscar negócio, categoria ou serviço..."
+              aria-label="Buscar negócios"
+              className="flex-1 bg-transparent text-sm text-white placeholder:text-white/35 outline-none"
+            />
+            {categoria && <input type="hidden" name="categoria" value={categoria} />}
+          </div>
+        </form>
+
+        {/* Filtros de categoria */}
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
+          <Link
+            href={q ? `/businesses?q=${q}` : "/businesses"}
+            aria-label="Mostrar todos os negócios"
+            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${
+              !categoria
+                ? "bg-gradient-to-r from-blue-500 to-blue-700 text-white"
+                : "bg-white/[0.08] border border-white/10 text-white/70 hover:bg-white/[0.14]"
             }`}
           >
-            {cat.name}
+            Todos
           </Link>
-        ))}
-      </div>
+          {categories.map((cat) => (
+            <Link
+              key={cat.id}
+              href={`/businesses?categoria=${cat.slug}${q ? `&q=${q}` : ""}`}
+              aria-label={`Filtrar por ${cat.name}`}
+              className={`shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                categoria === cat.slug
+                  ? "bg-gradient-to-r from-blue-500 to-blue-700 text-white"
+                  : "bg-white/[0.08] border border-white/10 text-white/70 hover:bg-white/[0.14]"
+              }`}
+            >
+              <CategoryIcon slug={cat.slug} size={12} />
+              {cat.name}
+            </Link>
+          ))}
+        </div>
 
-      {/* Resultados */}
-      {businesses.length > 0 ? (
-        <>
-          <p className="text-xs text-gray-400 mb-4">
+        {/* Contador de resultados */}
+        {businesses.length > 0 && (
+          <p className="text-white/40 text-xs mb-4">
             {businesses.length} negócio{businesses.length !== 1 ? "s" : ""} encontrado{businesses.length !== 1 ? "s" : ""}
             {q ? ` para "${q}"` : ""}
-            {categoria ? ` em ${categories.find((c) => c.slug === categoria)?.name}` : ""}
+            {activeCategory ? ` em ${activeCategory.name}` : ""}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        )}
+
+        {/* Lista de cards */}
+        {businesses.length > 0 ? (
+          <div className="flex flex-col gap-3">
             {businesses.map((business) => (
               <BusinessCard key={business.id} business={business} />
             ))}
           </div>
-        </>
-      ) : (
-        <div className="text-center py-20">
-          <p className="text-4xl mb-4">🔍</p>
-          <p className="font-semibold text-gray-700 mb-1">Nenhum negócio encontrado</p>
-          <p className="text-sm text-gray-400">
-            {q
-              ? `Nenhum resultado para "${q}". Tente outro termo.`
-              : "Ainda não há negócios cadastrados nessa categoria."}
-          </p>
-          <Link
-            href="/businesses"
-            className="inline-block mt-4 text-sm text-blue-700 hover:underline"
-          >
-            Ver todos os negócios
-          </Link>
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <SearchX size={40} className="text-white/20 mb-4" aria-hidden="true" />
+            <p className="text-white/60 font-semibold mb-1">Nenhum negócio encontrado</p>
+            <p className="text-white/35 text-sm mb-5">
+              {q
+                ? `Sem resultados para "${q}". Tente outro termo.`
+                : "Ainda não há negócios nessa categoria."}
+            </p>
+            <Link
+              href="/businesses"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors underline underline-offset-2"
+            >
+              Ver todos os negócios
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

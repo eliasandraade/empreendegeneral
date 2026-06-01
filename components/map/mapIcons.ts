@@ -2,6 +2,7 @@
 // ATENÇÃO: importar apenas em componentes com ssr:false (Leaflet é client-only)
 import L from "leaflet"
 import type { BusinessMapPin } from "@/types"
+import { getCategoryConfig as _getCategoryConfig, CATEGORY_CONFIG as _CATEGORY_CONFIG } from "@/lib/categoryConfig"
 
 // Paths SVG sourced from lucide.dev — verifique visualmente no browser após deploy
 const SVG_PATHS: Record<string, string> = {
@@ -40,23 +41,11 @@ const SVG_PATHS: Record<string, string> = {
   ].join(""),
 }
 
-export const CATEGORY_CONFIG: Record<string, { color: string; slug: string }> = {
-  alimentacao: { color: "#f97316", slug: "alimentacao" },
-  beleza:      { color: "#be185d", slug: "beleza" },
-  comercio:    { color: "#3b82f6", slug: "comercio" },
-  servicos:    { color: "#6b7280", slug: "servicos" },
-  agro:        { color: "#22c55e", slug: "agro" },
-  saude:       { color: "#ef4444", slug: "saude" },
-  default:     { color: "#1d4ed8", slug: "default" },
-}
+export const CATEGORY_CONFIG = _CATEGORY_CONFIG
+export const getCategoryConfig = _getCategoryConfig
 
 export const FEATURED_COLOR = "#eab308"
 export const FEATURED_COLOR_DARK = "#ca8a04"
-
-export function getCategoryConfig(slug?: string | null) {
-  if (!slug) return CATEGORY_CONFIG.default
-  return CATEGORY_CONFIG[slug] ?? CATEGORY_CONFIG.default
-}
 
 function makeSvg(paths: string, size: number): string {
   return (

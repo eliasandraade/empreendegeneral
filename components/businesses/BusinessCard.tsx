@@ -2,7 +2,7 @@ import Link from "next/link"
 import { MapPin, Star, ChevronRight } from "lucide-react"
 import { CategoryIcon } from "@/components/ui/CategoryIcon"
 import { BusinessCardDistance } from "@/components/businesses/BusinessCardDistance"
-import { getCategoryConfig } from "@/components/map/mapIcons"
+import { getCategoryConfig } from "@/lib/categoryConfig"
 import type { Business, Category, BusinessImage } from "@prisma/client"
 
 type BusinessWithRelations = Business & {
