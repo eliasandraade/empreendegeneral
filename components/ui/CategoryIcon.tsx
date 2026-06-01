@@ -2,22 +2,23 @@ import {
   Utensils,
   Scissors,
   ShoppingBag,
-  Wrench,
-  Sprout,
-  Cross,
+  Shirt,
+  Store,
+  Hammer,
   MapPin,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-// Mapeia slug de categoria → ícone Lucide
+// Mapeia slug real do banco → ícone Lucide
 const ICON_MAP: Record<string, LucideIcon> = {
-  alimentacao: Utensils,
-  beleza:      Scissors,
-  comercio:    ShoppingBag,
-  servicos:    Wrench,
-  agro:        Sprout,
-  saude:       Cross,
-  default:     MapPin,
+  alimentacao:         Utensils,
+  mercados:            Store,
+  saloes:              Scissors,
+  "comercio-em-geral": ShoppingBag,
+  "moda-e-vestuario":  Shirt,
+  "beleza-e-estetica": Scissors,
+  "construcao-e-agro": Hammer,
+  default:             MapPin,
 }
 
 interface CategoryIconProps {

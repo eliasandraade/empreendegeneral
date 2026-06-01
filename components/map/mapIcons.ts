@@ -4,37 +4,54 @@ import L from "leaflet"
 import type { BusinessMapPin } from "@/types"
 import { getCategoryConfig as _getCategoryConfig, CATEGORY_CONFIG as _CATEGORY_CONFIG } from "@/lib/categoryConfig"
 
-// Paths SVG sourced from lucide.dev — verifique visualmente no browser após deploy
+// Paths SVG com slugs reais do banco de dados
 const SVG_PATHS: Record<string, string> = {
+  // Utensils — alimentação
   alimentacao: [
     `<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>`,
     `<path d="M7 2v20"/>`,
     `<path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>`,
   ].join(""),
-  beleza: [
+  // Store — mercados
+  mercados: [
+    `<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>`,
+    `<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>`,
+    `<path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>`,
+    `<path d="M2 7h20"/>`,
+  ].join(""),
+  // Scissors — salões
+  saloes: [
     `<circle cx="6" cy="6" r="3"/>`,
     `<circle cx="6" cy="18" r="3"/>`,
     `<line x1="20" x2="8.12" y1="4" y2="15.88"/>`,
     `<line x1="14.47" x2="20" y1="14.48" y2="20"/>`,
     `<line x1="8.12" x2="12" y1="8.12" y2="12"/>`,
   ].join(""),
-  comercio: [
+  // ShoppingBag — comércio em geral
+  "comercio-em-geral": [
     `<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>`,
     `<line x1="3" x2="21" y1="6" y2="6"/>`,
     `<path d="M16 10a4 4 0 0 1-8 0"/>`,
   ].join(""),
-  servicos: [
-    `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`,
+  // Shirt — moda e vestuário
+  "moda-e-vestuario": [
+    `<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/>`,
   ].join(""),
-  agro: [
-    `<path d="M7 20h10"/>`,
-    `<path d="M10 20c5.5-2.5.8-6.4 3-10"/>`,
-    `<path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/>`,
-    `<path d="M14.1 6a7 7 0 0 1 1.5 9.9"/>`,
+  // Scissors — beleza e estética
+  "beleza-e-estetica": [
+    `<circle cx="6" cy="6" r="3"/>`,
+    `<circle cx="6" cy="18" r="3"/>`,
+    `<line x1="20" x2="8.12" y1="4" y2="15.88"/>`,
+    `<line x1="14.47" x2="20" y1="14.48" y2="20"/>`,
+    `<line x1="8.12" x2="12" y1="8.12" y2="12"/>`,
   ].join(""),
-  saude: [
-    `<path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h5v5c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2h-2z"/>`,
+  // Hammer — construção e agro
+  "construcao-e-agro": [
+    `<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/>`,
+    `<path d="m18 15 4-4"/>`,
+    `<path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>`,
   ].join(""),
+  // MapPin — default
   default: [
     `<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>`,
     `<circle cx="12" cy="10" r="3"/>`,

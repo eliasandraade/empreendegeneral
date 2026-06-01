@@ -1,12 +1,13 @@
 // Configuração de cores e slugs por categoria — sem dependências client-only
 export const CATEGORY_CONFIG: Record<string, { color: string; slug: string }> = {
-  alimentacao: { color: "#f97316", slug: "alimentacao" },
-  beleza:      { color: "#be185d", slug: "beleza" },
-  comercio:    { color: "#3b82f6", slug: "comercio" },
-  servicos:    { color: "#6b7280", slug: "servicos" },
-  agro:        { color: "#22c55e", slug: "agro" },
-  saude:       { color: "#ef4444", slug: "saude" },
-  default:     { color: "#1d4ed8", slug: "default" },
+  alimentacao:      { color: "#f97316", slug: "alimentacao" },
+  mercados:         { color: "#3b82f6", slug: "mercados" },
+  saloes:           { color: "#be185d", slug: "saloes" },
+  "comercio-em-geral":  { color: "#8b5cf6", slug: "comercio-em-geral" },
+  "moda-e-vestuario":   { color: "#ec4899", slug: "moda-e-vestuario" },
+  "beleza-e-estetica":  { color: "#db2777", slug: "beleza-e-estetica" },
+  "construcao-e-agro":  { color: "#22c55e", slug: "construcao-e-agro" },
+  default:          { color: "#1d4ed8", slug: "default" },
 }
 
 export function getCategoryConfig(slug?: string | null) {
