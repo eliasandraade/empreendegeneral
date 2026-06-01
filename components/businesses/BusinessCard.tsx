@@ -1,6 +1,8 @@
 import Link from "next/link"
-import Image from "next/image"
-import { Star, MapPin } from "lucide-react"
+import { MapPin, Star, ChevronRight } from "lucide-react"
+import { CategoryIcon } from "@/components/ui/CategoryIcon"
+import { BusinessCardDistance } from "@/components/businesses/BusinessCardDistance"
+import { getCategoryConfig } from "@/components/map/mapIcons"
 import type { Business, Category, BusinessImage } from "@prisma/client"
 
 type BusinessWithRelations = Business & {
@@ -14,64 +16,58 @@ interface BusinessCardProps {
 }
 
 export function BusinessCard({ business }: BusinessCardProps) {
-  const primaryImage = business.images[0]
+  const cfg = getCategoryConfig(business.category?.slug ?? null)
 
   return (
     <Link
       href={`/businesses/${business.slug}`}
-      className="group flex flex-col rounded-xl border border-gray-100 bg-white overflow-hidden hover:shadow-md hover:border-blue-100 transition-all"
+      className="group flex items-center gap-4 p-4 bg-white/[0.05] border border-white/10 rounded-2xl hover:bg-white/[0.08] hover:border-white/20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 transition-all duration-200"
+      aria-label={`Ver detalhes de ${business.name}`}
     >
-      {/* Imagem */}
-      <div className="relative h-44 bg-gray-100 shrink-0">
-        {primaryImage ? (
-          <Image
-            src={primaryImage.url}
-            alt={primaryImage.alt ?? business.name}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-blue-50">
-            <span className="text-4xl">🏪</span>
-          </div>
-        )}
-        {/* Badge de categoria */}
-        {business.category && (
-          <span className="absolute top-3 left-3 bg-white/90 text-blue-700 text-xs font-medium px-2 py-1 rounded-full">
-            {business.category.name}
-          </span>
-        )}
+      {/* Ícone da categoria */}
+      <div
+        className="w-[52px] h-[52px] rounded-xl flex items-center justify-center shrink-0"
+        style={{ background: `linear-gradient(135deg, ${cfg.color}cc, ${cfg.color})` }}
+        aria-hidden="true"
+      >
+        <CategoryIcon slug={business.category?.slug} size={24} className="text-white" />
       </div>
 
       {/* Conteúdo */}
-      <div className="flex flex-col gap-2 p-4 flex-1">
-        <h3 className="font-semibold text-gray-800 group-hover:text-blue-700 transition-colors leading-tight">
-          {business.name}
-        </h3>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2 mb-0.5">
+          <h3 className="text-white font-bold text-sm leading-tight truncate group-hover:text-blue-200 transition-colors">
+            {business.name}
+          </h3>
+          {business.featured && (
+            <span className="shrink-0 text-[10px] font-black text-black bg-[#eab308] px-2 py-0.5 rounded-full leading-tight">
+              ★ Destaque
+            </span>
+          )}
+        </div>
 
         {business.address && (
-          <div className="flex items-center gap-1 text-xs text-gray-400">
-            <MapPin size={12} />
-            <span className="truncate">{business.address}</span>
+          <div className="flex items-center gap-1 mb-1">
+            <MapPin size={11} className="text-white/40 shrink-0" aria-hidden="true" />
+            <span className="text-xs text-white/50 truncate">{business.address}</span>
+            {business.latitude && business.longitude && (
+              <BusinessCardDistance lat={business.latitude} lng={business.longitude} />
+            )}
           </div>
         )}
 
-        {business.description && (
-          <p className="text-sm text-gray-500 line-clamp-2 flex-1">
-            {business.description}
-          </p>
-        )}
-
-        {/* Rodapé do card */}
-        <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-          <Star size={12} className="text-yellow-400 fill-yellow-400" />
-          <span>
+        <div className="flex items-center gap-1">
+          <Star size={12} className="text-yellow-400 fill-yellow-400" aria-hidden="true" />
+          <span className="text-xs text-white/50">
             {business._count.reviews > 0
               ? `${business._count.reviews} avaliação${business._count.reviews > 1 ? "ões" : ""}`
-              : "Sem avaliações ainda"}
+              : "Sem avaliações"}
           </span>
         </div>
       </div>
+
+      {/* Seta visual */}
+      <ChevronRight size={16} className="text-white/30 shrink-0" aria-hidden="true" />
     </Link>
   )
 }
