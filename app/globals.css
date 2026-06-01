@@ -84,3 +84,18 @@
     text-wrap: balance;
   }
 }
+
+/* Ocultar scrollbar mantendo funcionalidade de scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Animação de halo pulsante para pins em destaque no mapa */
+@keyframes pin-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
