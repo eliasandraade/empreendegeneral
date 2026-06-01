@@ -49,6 +49,7 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 - Ícones: Lucide em produção; emojis aceitos como placeholder durante dev
 - Evitar bordas sólidas escuras — preferir bordas translúcidas
 - Não usar gradientes neon; gradientes suaves da cor da categoria são permitidos
+- **Opacidades não-padrão do Tailwind:** usar sintaxe de valor arbitrário — ex: `bg-white/[0.08]` (não `bg-white/8`), `border-white/[0.12]` (não `border-white/12`). Opacidades padrão Tailwind: 5, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 95.
 
 ---
 
@@ -74,10 +75,11 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 ### Comportamento por zoom
 - Zoom distante (< 15): apenas pins, sem labels
 - Zoom próximo (≥ 15): exibir nome do negócio abaixo do pin
-- Implementação: escutar `zoomend` do Leaflet, recriar markers com label condicional
+- Implementação: escutar `zoomend` do Leaflet → atualizar estado `zoomLevel` → `filteredKey` inclui `zoomLevel` → markers recriados apenas quando filtro, busca **ou** zoom mudam
 
 ### Implementação técnica
 - `createBusinessIcon()` continua gerando `L.DivIcon` com HTML inline
+- Cache de ícones: `Map<string, L.DivIcon>` com chave `${categorySlug}-${featured}-${showLabel}` — evita recriar ícones idênticos a cada render (reconcilia performance com zoom behavior)
 - Ícones Lucide: SVG strings hardcoded por categoria (evitar `renderToStaticMarkup` por complexidade)
 - Animação `pulse` definida via `<style>` injetado uma vez no `useEffect` de init
 
@@ -111,7 +113,7 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 - Cada pill: ícone Lucide da categoria + nome
 
 ### Espaço reservado
-- Layout da linha 1 deve comportar futuramente um botão "📍 Perto de você" sem reformulação
+- Layout da linha 1 deve comportar futuramente um botão "Perto de você" (ícone `Navigation` Lucide) sem reformulação — não usar emoji no código
 
 ### Sem mudança de lógica
 - Estado gerenciado pelo `MapCanvas` existente
@@ -128,7 +130,7 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 - `bg-[#0c1b2e]/97 backdrop-blur-2xl`
 - `border-t border-white/10` (mobile) / `border border-white/10` (desktop)
 - `z-[1000] shadow-2xl`
-- Entrada: `animate-slide-up` (transition via `translate-y`)
+- Entrada: `animate-slide-up` (transition via `translate-y`) — requer extensão em `tailwind.config.js`: `keyframes: { 'slide-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } } }` + `animation: { 'slide-up': 'slide-up 0.25s ease-out' }`
 
 **Conteúdo — de cima para baixo:**
 
@@ -256,3 +258,111 @@ O backend e o fluxo funcional estão operacionais. O problema é que o frontend 
 - Não alterar painel admin ou dashboard do empreendedor
 - Não usar estética cyberpunk, neon exagerado ou Web3
 - Não usar emojis em produção (apenas durante dev como placeholder)
+
+---
+
+## 9. Arquitetura Atual — Preservação
+
+Adaptar o novo design à arquitetura atual, não reconstruir o projeto.
+
+**Regras:**
+- Refatorar componentes existentes sempre que possível; não recriar o que já existe
+- Não renomear componentes existentes sem necessidade técnica documentada
+- Não mover arquivos sem justificativa técnica clara
+- Não alterar import paths públicos
+- Não alterar a estrutura de rotas existente
+
+---
+
+## 10. Antes de Implementar Qualquer Componente
+
+Antes de escrever código, mapear obrigatoriamente:
+
+1. Código existente do componente ou página
+2. Componentes atuais e suas props
+3. Hooks utilizados
+4. Tipos TypeScript existentes
+5. Componentes reutilizáveis aproveitáveis
+
+A implementação deve aproveitar a base existente. Evitar reescrita completa quando uma refatoração resolve.
+
+---
+
+## 11. Definition of Done
+
+A implementação só será considerada concluída quando:
+
+**Build e lint:**
+- `npm run lint` sem erros
+- `npm run build` sem erros
+- TypeScript sem erros (`strict`)
+
+**Runtime:**
+- Sem hydration mismatch
+- Sem erros de Leaflet no console
+- Sem erros no console do navegador
+
+**Responsividade (testar em):**
+- 390px (mobile)
+- 768px (tablet)
+- 1024px (laptop)
+- 1440px (desktop)
+
+**Funcionalidade:**
+- Todos os links funcionando
+- Todos os botões funcionando
+- Nenhum componente quebrado
+- Nenhuma rota pública quebrada
+
+---
+
+## 12. Campo `featured`
+
+- O campo `featured` já existe no schema — não criar, não alterar
+- Não alterar migrations
+- O redesign apenas consome o valor existente para aplicar pin dourado, halo, badge `★` e badge "Destaque" na página de detalhe
+
+---
+
+## 13. Distância — Formatação Padronizada
+
+Fórmula: Haversine (já existe em `BusinessMapCard.tsx` — reutilizar)
+
+| Valor | Exibição |
+|---|---|
+| < 1000 m | `850 m` (inteiro) |
+| ≥ 1000 m | `1,2 km` (1 casa decimal, vírgula) |
+
+- Ocultar completamente se localização não disponível (não exibir "—" ou "N/A")
+- Em `/businesses`: usar componente `BusinessCardDistance` com `"use client"` (Server Component pai não tem acesso a geolocalização)
+- Em `BusinessMapCard`: reutilizar `haversineKm` e `formatDistance` já existentes
+
+---
+
+## 14. Avaliações — Dados Reais
+
+- Se não existirem avaliações: renderizar estado vazio elegante com ícone `Star` Lucide
+- Nunca criar avaliações fictícias ou dados mockados
+- O sistema deve refletir apenas dados reais do banco
+
+---
+
+## 15. Performance
+
+- Evitar re-renderizações desnecessárias nos componentes de mapa
+- Memoizar `createBusinessIcon()` por categoria+featured (não recriar a cada render)
+- `MapView`: marcadores recriados apenas quando `filteredKey` muda (comportamento atual mantido)
+- Lazy load para `MiniMap` na página de detalhe (`dynamic({ ssr: false })`)
+- Usar `next/image` para todas as imagens de negócio
+- Não introduzir bibliotecas adicionais desnecessárias — manter bundle enxuto
+
+---
+
+## 16. Acessibilidade
+
+Todos os elementos interativos devem ter:
+- `aria-label` descritivo
+- Foco visível (`focus-visible:ring-2`)
+- Contraste adequado (texto sobre fundo escuro: mínimo 4.5:1)
+
+O site deve permanecer utilizável por teclado.
