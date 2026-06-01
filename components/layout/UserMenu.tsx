@@ -4,7 +4,9 @@
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { signOut } from "next-auth/react"
+import { signOut as firebaseSignOut } from "firebase/auth"
+import { getFirebaseAuth } from "@/lib/firebase"
+import { useRouter } from "next/navigation"
 import { ChevronDown, LayoutDashboard, LogOut, ShieldCheck } from "lucide-react"
 
 interface UserMenuProps {
@@ -17,6 +19,14 @@ interface UserMenuProps {
 export function UserMenu({ name, email, image, role }: UserMenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+
+  async function handleSignOut() {
+    await firebaseSignOut(getFirebaseAuth())
+    await fetch("/api/auth/session", { method: "DELETE" })
+    router.push("/")
+    router.refresh()
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -67,7 +77,7 @@ export function UserMenu({ name, email, image, role }: UserMenuProps) {
             </Link>
           )}
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={handleSignOut}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
           >
             <LogOut size={15} />

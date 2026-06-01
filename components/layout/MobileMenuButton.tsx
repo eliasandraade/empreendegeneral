@@ -4,7 +4,9 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Menu, X } from "lucide-react"
-import { signOut } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { signOut as firebaseSignOut } from "firebase/auth"
+import { getFirebaseAuth } from "@/lib/firebase"
 
 interface Props {
   navLinks: { href: string; label: string }[]
@@ -13,7 +15,16 @@ interface Props {
 
 export function MobileMenuButton({ navLinks, user }: Props) {
   const [open, setOpen] = useState(false)
+  const router = useRouter()
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN"
+
+  async function handleSignOut() {
+    await firebaseSignOut(getFirebaseAuth())
+    await fetch("/api/auth/session", { method: "DELETE" })
+    setOpen(false)
+    router.push("/")
+    router.refresh()
+  }
 
   return (
     <>
@@ -36,7 +47,7 @@ export function MobileMenuButton({ navLinks, user }: Props) {
                 {isAdmin && (
                   <Link href="/admin/businesses" className="text-sm font-medium text-blue-700" onClick={() => setOpen(false)}>Painel admin</Link>
                 )}
-                <button onClick={() => signOut({ callbackUrl: "/" })} className="text-left text-sm font-medium text-red-600">Sair</button>
+                <button onClick={handleSignOut} className="text-left text-sm font-medium text-red-600">Sair</button>
               </>
             ) : (
               <>

@@ -1,6 +1,6 @@
 // components/layout/Header.tsx
 import Link from "next/link"
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { APP_CONFIG } from "@/config"
 import { UserMenu } from "./UserMenu"
 import { MobileMenuButton } from "./MobileMenuButton"
@@ -10,8 +10,7 @@ const navLinks = [
 ]
 
 export async function Header() {
-  const session = await auth()
-  const user = session?.user
+  const user = await getServerSession()
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
@@ -34,7 +33,7 @@ export async function Header() {
               name={user.name}
               email={user.email}
               image={user.image}
-              role={(user as { role?: string }).role ?? "USER"}
+              role={user.role}
             />
           ) : (
             <>
@@ -49,7 +48,7 @@ export async function Header() {
         </div>
 
         <MobileMenuButton
-          user={user ? { name: user.name, email: user.email, role: (user as { role?: string }).role ?? "USER" } : null}
+          user={user ? { name: user.name, email: user.email, role: user.role } : null}
           navLinks={navLinks}
         />
       </div>

@@ -2,7 +2,7 @@
 "use server"
 
 import { redirect } from "next/navigation"
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { createBusinessSchema } from "@/validations"
 import { generateUniqueSlug } from "@/lib/slug"
@@ -12,9 +12,9 @@ export async function createBusinessAction(
   _prevState: ActionResult | null,
   formData: FormData
 ): Promise<ActionResult> {
-  const session = await auth()
+  const session = await getServerSession()
 
-  if (!session?.user?.id) {
+  if (!session?.id) {
     return { success: false, error: "Você precisa estar autenticado." }
   }
 
@@ -64,7 +64,7 @@ export async function createBusinessAction(
       latitude: data.latitude,
       longitude: data.longitude,
       status: "PENDING",
-      ownerId: session.user.id,
+      ownerId: session.id,
     },
   })
 

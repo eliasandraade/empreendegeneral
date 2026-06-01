@@ -2,7 +2,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import type { ActionResult } from "@/types"
 
@@ -11,9 +11,9 @@ function isAdminRole(role: string) {
 }
 
 export async function approveBusinessAction(businessId: string): Promise<ActionResult<undefined>> {
-  const session = await auth()
+  const session = await getServerSession()
 
-  if (!session?.user?.id || !isAdminRole(session.user.role as string)) {
+  if (!session?.id || !isAdminRole(session.role)) {
     return { success: false, error: "Acesso negado." }
   }
 
@@ -37,7 +37,7 @@ export async function approveBusinessAction(businessId: string): Promise<ActionR
     }
 
     await tx.adminAction.create({
-      data: { adminId: session.user.id, action: "APPROVE_BUSINESS", targetId: businessId },
+      data: { adminId: session.id, action: "APPROVE_BUSINESS", targetId: businessId },
     })
   })
 
@@ -50,9 +50,9 @@ export async function approveBusinessAction(businessId: string): Promise<ActionR
 }
 
 export async function rejectBusinessAction(businessId: string, reason: string): Promise<ActionResult<undefined>> {
-  const session = await auth()
+  const session = await getServerSession()
 
-  if (!session?.user?.id || !isAdminRole(session.user.role as string)) {
+  if (!session?.id || !isAdminRole(session.role)) {
     return { success: false, error: "Acesso negado." }
   }
 
@@ -73,7 +73,7 @@ export async function rejectBusinessAction(businessId: string, reason: string): 
       data: { status: "REJECTED", rejectionReason: reason.trim() },
     })
     await tx.adminAction.create({
-      data: { adminId: session.user.id, action: "REJECT_BUSINESS", targetId: businessId, reason: reason.trim() },
+      data: { adminId: session.id, action: "REJECT_BUSINESS", targetId: businessId, reason: reason.trim() },
     })
   })
 

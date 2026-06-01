@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic"
 
 import dynamicImport from "next/dynamic"
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { APP_CONFIG } from "@/config"
 import type { BusinessMapPin } from "@/types"
@@ -24,7 +24,7 @@ const MapCanvas = dynamicImport(
 
 export default async function HomePage() {
   const [session, businesses, categories] = await Promise.all([
-    auth(),
+    getServerSession(),
     prisma.business.findMany({
       where: {
         status: "APPROVED",
@@ -54,7 +54,7 @@ export default async function HomePage() {
       <MapCanvas
         businesses={pins}
         categories={categories}
-        isAuthenticated={!!session?.user}
+        isAuthenticated={!!session}
         appName={APP_CONFIG.name}
         slogan={process.env.NEXT_PUBLIC_SLOGAN ?? ""}
       />

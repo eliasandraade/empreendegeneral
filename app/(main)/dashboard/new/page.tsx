@@ -1,16 +1,17 @@
 // app/(main)/dashboard/new/page.tsx
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { BusinessForm } from "@/components/businesses/BusinessForm"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
+export const dynamic = "force-dynamic"
 export const metadata = { title: "Cadastrar negócio" }
 
 export default async function NewBusinessPage() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
+  const session = await getServerSession()
+  if (!session?.id) redirect("/login")
 
   const categories = await prisma.category.findMany({
     orderBy: { name: "asc" },

@@ -1,11 +1,12 @@
 // app/(main)/dashboard/page.tsx
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
 import { Plus, CheckCircle2, ExternalLink } from "lucide-react"
 import type { BusinessStatus } from "@prisma/client"
 
+export const dynamic = "force-dynamic"
 export const metadata = { title: "Meu painel" }
 
 const statusConfig: Record<BusinessStatus, { label: string; color: string }> = {
@@ -19,11 +20,11 @@ interface PageProps {
 }
 
 export default async function DashboardPage({ searchParams }: PageProps) {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
+  const session = await getServerSession()
+  if (!session?.id) redirect("/login")
 
   const businesses = await prisma.business.findMany({
-    where: { ownerId: session.user.id, deletedAt: null },
+    where: { ownerId: session.id, deletedAt: null },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -48,7 +49,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Meu painel</h1>
-          <p className="text-gray-500 text-sm mt-1">Olá, {session.user.name?.split(" ")[0] ?? "empreendedor"}!</p>
+          <p className="text-gray-500 text-sm mt-1">Olá, {session.name?.split(" ")[0] ?? "empreendedor"}!</p>
         </div>
         <Link
           href="/dashboard/new"

@@ -1,11 +1,12 @@
 // app/(main)/admin/businesses/page.tsx
-import { auth } from "@/auth"
+import { getServerSession } from "@/lib/session"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { approveBusinessAction, rejectBusinessAction } from "@/lib/actions/admin"
 import { CheckCircle2, XCircle, Clock, MapPin } from "lucide-react"
 import type { BusinessStatus } from "@prisma/client"
 
+export const dynamic = "force-dynamic"
 export const metadata = { title: "Painel Admin — Negócios" }
 
 const statusLabels: Record<BusinessStatus, string> = {
@@ -25,8 +26,8 @@ interface PageProps {
 }
 
 export default async function AdminBusinessesPage({ searchParams }: PageProps) {
-  const session = await auth()
-  const role = session?.user?.role as string | undefined
+  const session = await getServerSession()
+  const role = session?.role
 
   if (!role || (role !== "ADMIN" && role !== "SUPER_ADMIN")) redirect("/")
 
