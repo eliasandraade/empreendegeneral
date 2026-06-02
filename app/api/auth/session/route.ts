@@ -18,23 +18,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email e senha obrigatórios" }, { status: 400 })
     }
 
-    // Verifica credenciais de admin via variável de ambiente
-    const adminEmail = process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase())
-    const adminPassword = process.env.ADMIN_PASSWORD
+    // Trim garante que CRLF do PowerShell não quebre a comparação
+    const adminEmails = (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+    const adminPassword = (process.env.ADMIN_PASSWORD ?? "").trim()
 
-    const isAdminEmail = adminEmail?.includes(email.toLowerCase())
+    const isAdminEmail = adminEmails.includes(email.trim().toLowerCase())
 
     if (!isAdminEmail || !adminPassword) {
-      return NextResponse.json({ error: "Credenciais inválidas" }, { status: 401 })
+      return NextResponse.json(
+        { error: "Credenciais inválidas", detail: `emails configurados: ${adminEmails.length}` },
+        { status: 401 }
+      )
     }
 
     // Compara senha com hash armazenado (ou plain text em desenvolvimento)
     const passwordMatch = adminPassword.startsWith("$2")
       ? await bcrypt.compare(password, adminPassword)
-      : password === adminPassword
+      : password.trim() === adminPassword
 
     if (!passwordMatch) {
-      return NextResponse.json({ error: "Credenciais inválidas" }, { status: 401 })
+      return NextResponse.json(
+        { error: "Credenciais inválidas", detail: "senha incorreta" },
+        { status: 401 }
+      )
     }
 
     // Upsert do admin no banco
