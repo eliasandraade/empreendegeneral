@@ -91,7 +91,7 @@ function MapInner({
     <>
       {filtered.map((pin) => {
         if (pin.latitude === null || pin.longitude === null) return null
-        const { html, width, height, anchorX, anchorY } = buildPinHtml(pin, showLabel)
+        const { html, width, height } = buildPinHtml(pin, showLabel)
         return (
           <AdvancedMarker
             key={pin.id}
