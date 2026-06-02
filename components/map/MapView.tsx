@@ -13,26 +13,13 @@ const DEFAULT_CENTER = { lat: -3.754, lng: -39.453 }
 const DEFAULT_ZOOM = 14
 const LABEL_ZOOM_THRESHOLD = 15
 
-// Estilo escuro Azul Noturno
-const DARK_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#0c1b2e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0c1b2e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8ab4f8" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#93c5fd" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b9fd4" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0d2137" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3a6186" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a3a5c" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0c2340" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7aa8d8" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#1e4976" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#0e2d50" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#93c5fd" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#0d2137" }] },
-  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#6b9fd4" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#071728" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3a6186" }] },
-  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#071728" }] },
+// Estilo limpo: remove POIs desnecessários, mantém mapa claro e legível
+const CLEAN_STYLE: google.maps.MapTypeStyle[] = [
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.medical", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "simplified" }] },
 ]
 
 interface Props {
@@ -132,7 +119,7 @@ export function MapView(props: Props) {
         defaultZoom={DEFAULT_ZOOM}
         disableDefaultUI={false}
         gestureHandling="greedy"
-        styles={DARK_STYLE}
+        styles={CLEAN_STYLE}
         style={{ width: "100%", height: "100%" }}
         onClick={() => props.onSelectBusiness(null)}
       >

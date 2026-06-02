@@ -57,5 +57,6 @@ export type BusinessMapPin = {
   phone: string | null
   whatsapp: string | null
   address: string | null
+  hours: string | null
   category: { name: string; slug: string; icon: string | null } | null
 }

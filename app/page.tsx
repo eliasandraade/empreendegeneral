@@ -41,6 +41,7 @@ export default async function HomePage() {
         phone: true,
         whatsapp: true,
         address: true,
+        hours: true,
         category: { select: { name: true, slug: true, icon: true } },
       },
     }),

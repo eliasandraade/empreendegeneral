@@ -1,8 +1,7 @@
-// components/map/BusinessMapCard.tsx
 "use client"
 
 import Link from "next/link"
-import { X, MessageCircle, MapPin, Navigation, Phone, ExternalLink } from "lucide-react"
+import { X, MessageCircle, MapPin, Navigation, Phone, Clock, ExternalLink } from "lucide-react"
 import { haversineKm, formatDistance } from "@/lib/distance"
 import { CategoryIcon } from "@/components/ui/CategoryIcon"
 import { getCategoryConfig } from "@/components/map/mapIcons"
@@ -36,90 +35,106 @@ export function BusinessMapCard({ business, userLocation, onClose }: Props) {
         aria-hidden="true"
       />
 
+      {/* Card */}
       <div
         className={[
+          // mobile: bottom sheet
           "fixed bottom-0 left-0 right-0 rounded-t-3xl",
-          "md:absolute md:bottom-6 md:right-4 md:left-auto md:w-[340px] md:max-w-[380px] md:rounded-2xl md:max-h-[480px] md:overflow-y-auto",
-          "bg-[#0c1b2e]/[0.97] backdrop-blur-2xl",
-          "border-t border-white/10 md:border md:border-white/10",
-          "shadow-2xl z-[1000]",
+          // desktop: floating card bottom-right
+          "md:absolute md:bottom-5 md:right-4 md:left-auto md:w-80 md:rounded-2xl",
+          "bg-[#0c1b2e]/[0.98] backdrop-blur-2xl",
+          "border-t border-white/[0.1] md:border md:border-white/[0.1]",
+          "shadow-2xl shadow-black/60 z-[1000]",
           "animate-slide-up",
         ].join(" ")}
         role="dialog"
         aria-label={`Informações sobre ${business.name}`}
       >
-        {/* Drag handle (mobile only) */}
+        {/* Handle mobile */}
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-3 md:hidden" />
 
-        <div className="p-4 pt-3">
-          {/* Botão fechar */}
+        <div className="p-4">
+          {/* Fechar */}
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 rounded-xl p-1.5 transition-colors"
+            className="absolute top-3 right-3 w-8 h-8 bg-white/[0.08] hover:bg-white/[0.16] rounded-xl flex items-center justify-center transition-colors"
           >
-            <X size={16} className="text-white/70" />
+            <X size={15} className="text-white/60" />
           </button>
 
-          {/* Header: ícone + nome + metadados */}
+          {/* Header: ícone + categoria + nome */}
           <div className="flex items-start gap-3 mb-4 pr-8">
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: `linear-gradient(135deg, ${cfg.color}dd, ${cfg.color})` }}
+              className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: `linear-gradient(135deg, ${cfg.color}cc, ${cfg.color})` }}
               aria-hidden="true"
             >
-              <CategoryIcon slug={business.category?.slug} size={22} className="text-white" />
+              <CategoryIcon slug={business.category?.slug} size={20} className="text-white" />
             </div>
 
             <div className="flex-1 min-w-0">
               {business.category && (
-                <p
-                  className="text-[10px] font-bold uppercase tracking-wide mb-0.5"
-                  style={{ color: cfg.color }}
-                >
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: cfg.color }}>
                   {business.category.name}
                 </p>
               )}
-              <h3 className="text-lg font-black text-white leading-tight truncate">
+              <h3 className="text-base font-black text-white leading-tight">
                 {business.name}
               </h3>
-
               {distance !== null && (
-                <div className="flex items-center gap-1 mt-1">
-                  <Navigation size={11} className="text-blue-400 shrink-0" aria-hidden="true" />
-                  <span className="text-xs text-white/60">{formatDistance(distance)}</span>
-                </div>
-              )}
-
-              {business.address && (
                 <div className="flex items-center gap-1 mt-0.5">
-                  <MapPin size={11} className="text-white/40 shrink-0" aria-hidden="true" />
-                  <span className="text-xs text-white/60 truncate">{business.address}</span>
+                  <Navigation size={10} className="text-blue-400 shrink-0" />
+                  <span className="text-xs text-white/50">{formatDistance(distance)}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Ações */}
-          <div className="flex items-center gap-2">
+          {/* Detalhes */}
+          <div className="flex flex-col gap-2 mb-4">
+            {business.address && (
+              <div className="flex items-start gap-2">
+                <MapPin size={13} className="text-white/30 shrink-0 mt-0.5" />
+                <span className="text-xs text-white/55 leading-relaxed">{business.address}</span>
+              </div>
+            )}
+
+            {business.hours && (
+              <div className="flex items-start gap-2">
+                <Clock size={13} className="text-white/30 shrink-0 mt-0.5" />
+                <span className="text-xs text-white/55 leading-relaxed">{business.hours}</span>
+              </div>
+            )}
+
+            {(business.phone || business.whatsapp) && (
+              <div className="flex items-center gap-2">
+                <Phone size={13} className="text-white/30 shrink-0" />
+                <span className="text-xs text-white/55">{business.phone ?? business.whatsapp}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Botões de ação */}
+          <div className="flex gap-2">
             {whatsappUrl ? (
               <a
                 href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={`Abrir WhatsApp de ${business.name}`}
-                className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-bold px-3 py-2.5 rounded-xl hover:from-green-400 hover:to-green-500 transition-all shadow-lg shadow-green-900/30"
+                aria-label={`WhatsApp de ${business.name}`}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 rounded-xl transition-colors"
               >
-                <MessageCircle size={15} aria-hidden="true" />
+                <MessageCircle size={14} />
                 WhatsApp
               </a>
             ) : business.phone ? (
               <a
                 href={`tel:${business.phone}`}
                 aria-label={`Ligar para ${business.name}`}
-                className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-bold px-3 py-2.5 rounded-xl hover:from-blue-500 hover:to-blue-600 transition-all"
+                className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl transition-colors"
               >
-                <Phone size={15} aria-hidden="true" />
+                <Phone size={14} />
                 Ligar
               </a>
             ) : null}
@@ -128,20 +143,20 @@ export function BusinessMapCard({ business, userLocation, onClose }: Props) {
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Ver rota para ${business.name} no Google Maps`}
-              className="flex items-center gap-1.5 text-sm text-white/70 bg-white/[0.08] border border-white/[0.12] px-3 py-2.5 rounded-xl hover:bg-white/[0.14] transition-colors"
+              aria-label={`Rota para ${business.name}`}
+              className="flex items-center gap-1.5 text-xs text-white/60 bg-white/[0.07] border border-white/[0.1] px-3 py-2.5 rounded-xl hover:bg-white/[0.12] transition-colors"
             >
-              <MapPin size={15} aria-hidden="true" />
+              <MapPin size={13} />
               Rota
             </a>
 
             <Link
               href={`/businesses/${business.slug}`}
-              aria-label={`Ver perfil completo de ${business.name}`}
-              className="flex items-center gap-1.5 text-sm font-medium text-blue-300 bg-white/[0.08] border border-white/[0.12] px-3 py-2.5 rounded-xl hover:bg-white/[0.14] transition-colors ml-auto"
+              aria-label={`Perfil de ${business.name}`}
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-400 bg-white/[0.07] border border-white/[0.1] px-3 py-2.5 rounded-xl hover:bg-white/[0.12] transition-colors"
             >
               Ver
-              <ExternalLink size={13} aria-hidden="true" />
+              <ExternalLink size={12} />
             </Link>
           </div>
         </div>

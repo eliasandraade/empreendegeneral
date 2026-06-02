@@ -72,15 +72,15 @@ export default function MapCanvas({ businesses, categories, isAuthenticated, app
       <button
         onClick={requestLocation}
         title={locationError ? "Localização não disponível" : "Usar minha localização"}
-        className={`absolute bottom-6 left-4 z-[500] flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg transition-colors ${
+        className={`absolute bottom-6 left-4 z-[500] flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-full shadow-xl shadow-black/30 backdrop-blur-xl transition-colors border ${
           userLocation
-            ? "bg-blue-600 text-white"
+            ? "bg-blue-600 text-white border-blue-500"
             : locationError
-            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-            : "bg-white text-gray-700 hover:bg-gray-50"
+            ? "bg-[#0c1b2e]/80 text-white/30 border-white/[0.08] cursor-not-allowed"
+            : "bg-[#0c1b2e]/90 text-white/80 border-white/[0.12] hover:bg-[#0c1b2e] hover:text-white"
         }`}
       >
-        <MapPin size={16} className={userLocation ? "text-white" : "text-blue-600"} />
+        <MapPin size={14} className={userLocation ? "text-white" : "text-blue-400"} />
         {userLocation ? "Localização ativa" : "Usar minha localização"}
       </button>
 
