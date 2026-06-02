@@ -2,7 +2,7 @@
 // ATENÇÃO: importar apenas via dynamic() com ssr: false
 "use client"
 
-import { useEffect, useCallback, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { Map, useMap, APIProvider } from "@vis.gl/react-google-maps"
 import { buildPinHtml } from "@/components/map/mapIcons"
 import type { BusinessMapPin } from "@/types"
@@ -154,9 +154,10 @@ function MapInner({
 
   // Limpa todos os overlays ao desmontar o componente
   useEffect(() => {
+    const overlays = overlaysRef.current
     return () => {
-      overlaysRef.current.forEach((o) => o.setMap(null))
-      overlaysRef.current.clear()
+      overlays.forEach((o) => o.setMap(null))
+      overlays.clear()
     }
   }, [])
 
