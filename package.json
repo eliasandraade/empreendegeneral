@@ -18,19 +18,18 @@
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^5.22.0",
     "@radix-ui/react-slot": "^1.2.4",
+    "@vis.gl/react-google-maps": "^1.8.3",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
     "firebase": "^12.14.0",
     "firebase-admin": "^13.10.0",
-    "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
     "next": "14.2.35",
     "next-cloudinary": "^6.17.5",
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.71.2",
-    "react-leaflet": "^4.2.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.3.6"
@@ -39,7 +38,6 @@
     "seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
-    "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

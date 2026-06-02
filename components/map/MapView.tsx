@@ -1,19 +1,39 @@
 // components/map/MapView.tsx
-// ATENÇÃO: este arquivo deve ser importado apenas via dynamic() com ssr: false
+// ATENÇÃO: importar apenas via dynamic() com ssr: false
 "use client"
 
-import { useEffect, useRef } from "react"
-import L from "leaflet"
-import { createBusinessIcon } from "@/components/map/mapIcons"
+import { useEffect, useCallback } from "react"
+import { Map, AdvancedMarker, useMap, APIProvider } from "@vis.gl/react-google-maps"
+import { buildPinHtml } from "@/components/map/mapIcons"
 import type { BusinessMapPin } from "@/types"
 
-// Corrige ícone padrão quebrado do Leaflet com webpack
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-})
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""
+
+const DEFAULT_CENTER = { lat: -3.754, lng: -39.453 }
+const DEFAULT_ZOOM = 14
+const LABEL_ZOOM_THRESHOLD = 15
+
+// Estilo escuro Azul Noturno
+const DARK_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#0c1b2e" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0c1b2e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8ab4f8" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#93c5fd" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b9fd4" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0d2137" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3a6186" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a3a5c" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0c2340" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7aa8d8" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#1e4976" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#0e2d50" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#93c5fd" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#0d2137" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#6b9fd4" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#071728" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3a6186" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#071728" }] },
+]
 
 interface Props {
   businesses: BusinessMapPin[]
@@ -26,11 +46,7 @@ interface Props {
   onZoomChange: (zoom: number) => void
 }
 
-const DEFAULT_CENTER: [number, number] = [-3.754, -39.453]
-const DEFAULT_ZOOM = 14
-const LABEL_ZOOM_THRESHOLD = 15
-
-export function MapView({
+function MapInner({
   businesses,
   userLocation,
   selectedId,
@@ -40,9 +56,7 @@ export function MapView({
   zoomLevel,
   onZoomChange,
 }: Props) {
-  const mapRef = useRef<L.Map | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const markersRef = useRef<Map<string, L.Marker>>(new Map())
+  const map = useMap()
 
   const filtered = businesses.filter((b) => {
     if (categoryFilter && b.category?.slug !== categoryFilter) return false
@@ -50,83 +64,80 @@ export function MapView({
     return true
   })
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const filteredKey = JSON.stringify(filtered.map((b) => b.id)) + `-z${zoomLevel >= LABEL_ZOOM_THRESHOLD}`
+  const showLabel = zoomLevel >= LABEL_ZOOM_THRESHOLD
 
-  // Inicializar mapa
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
-
-    const map = L.map(containerRef.current, {
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
-      zoomControl: true,
-    })
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(map)
-
-    const handleZoom = () => onZoomChange(map.getZoom())
-    map.on("zoomend", handleZoom)
-
-    mapRef.current = map
-
-    return () => {
-      map.off("zoomend", handleZoom)
-      map.remove()
-      mapRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Recriar markers quando filtro, busca ou threshold de zoom mudam
-  useEffect(() => {
-    const map = mapRef.current
     if (!map) return
-
-    markersRef.current.forEach((m) => m.remove())
-    markersRef.current.clear()
-
-    const showLabel = zoomLevel >= LABEL_ZOOM_THRESHOLD
-
-    filtered.forEach((pin) => {
-      if (pin.latitude === null || pin.longitude === null) return
-
-      const marker = L.marker([pin.latitude, pin.longitude], {
-        icon: createBusinessIcon(pin, showLabel),
-      })
-
-      marker.on("click", () => onSelectBusiness(pin))
-      marker.addTo(map)
-      markersRef.current.set(pin.id, marker)
+    const listener = map.addListener("zoom_changed", () => {
+      onZoomChange(map.getZoom() ?? DEFAULT_ZOOM)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredKey, onSelectBusiness])
+    return () => listener.remove()
+  }, [map, onZoomChange])
 
-  // Localização do usuário
   useEffect(() => {
-    const map = mapRef.current
     if (!map || !userLocation) return
+    map.panTo(userLocation)
+    map.setZoom(15)
+  }, [map, userLocation])
 
-    const userIcon = L.divIcon({
-      html: `<div style="width:14px;height:14px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(59,130,246,0.3)"></div>`,
-      className: "",
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-    })
+  const handlePinClick = useCallback(
+    (pin: BusinessMapPin) => {
+      onSelectBusiness(selectedId === pin.id ? null : pin)
+    },
+    [onSelectBusiness, selectedId]
+  )
 
-    const marker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
-      .addTo(map)
-      .bindPopup("Você está aqui")
+  return (
+    <>
+      {filtered.map((pin) => {
+        if (pin.latitude === null || pin.longitude === null) return null
+        const { html, width, height, anchorX, anchorY } = buildPinHtml(pin, showLabel)
+        return (
+          <AdvancedMarker
+            key={pin.id}
+            position={{ lat: pin.latitude, lng: pin.longitude }}
+            onClick={() => handlePinClick(pin)}
+            title={pin.name}
+          >
+            <div
+              style={{ width, height }}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </AdvancedMarker>
+        )
+      })}
 
-    map.setView([userLocation.lat, userLocation.lng], 15)
+      {userLocation && (
+        <AdvancedMarker position={userLocation} title="Você está aqui">
+          <div style={{
+            width: 20,
+            height: 20,
+            background: "#3b82f6",
+            border: "3px solid white",
+            borderRadius: "50%",
+            boxShadow: "0 0 0 6px rgba(59,130,246,0.25)",
+          }} />
+        </AdvancedMarker>
+      )}
+    </>
+  )
+}
 
-    return () => { marker.remove() }
-  }, [userLocation])
-
-  void selectedId
-
-  return <div ref={containerRef} className="w-full h-full" />
+export function MapView(props: Props) {
+  return (
+    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
+      <Map
+        mapId="empreende-general-map"
+        defaultCenter={DEFAULT_CENTER}
+        defaultZoom={DEFAULT_ZOOM}
+        disableDefaultUI={false}
+        gestureHandling="greedy"
+        styles={DARK_STYLE}
+        style={{ width: "100%", height: "100%" }}
+        onClick={() => props.onSelectBusiness(null)}
+      >
+        <MapInner {...props} />
+      </Map>
+    </APIProvider>
+  )
 }

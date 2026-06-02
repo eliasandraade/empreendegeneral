@@ -1,68 +1,92 @@
-// components/map/mapIcons.ts
-// ATENÇÃO: importar apenas em componentes com ssr:false (Leaflet é client-only)
-import L from "leaflet"
+// Utilitários de ícone/cor para marcadores Google Maps — sem dependências Leaflet
 import type { BusinessMapPin } from "@/types"
-import { getCategoryConfig as _getCategoryConfig, CATEGORY_CONFIG as _CATEGORY_CONFIG } from "@/lib/categoryConfig"
+import { getCategoryConfig } from "@/lib/categoryConfig"
 
-// Paths SVG com slugs reais do banco de dados
+export { getCategoryConfig }
+
+export const FEATURED_COLOR = "#eab308"
+export const FEATURED_COLOR_DARK = "#ca8a04"
+
+// SVG paths por slug canônico (seed v2)
 const SVG_PATHS: Record<string, string> = {
-  // Utensils — alimentação
-  alimentacao: [
+  "alimentos-e-bebidas": [
     `<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>`,
     `<path d="M7 2v20"/>`,
     `<path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>`,
   ].join(""),
-  // Store — mercados
-  mercados: [
+  "supermercado": [
     `<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>`,
     `<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>`,
     `<path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>`,
     `<path d="M2 7h20"/>`,
   ].join(""),
-  // Scissors — salões
-  saloes: [
+  "padaria": [
+    `<path d="M9.5 11.5 3 14l9 9"/>`,
+    `<path d="M13.5 9.5l6.5-6.5"/>`,
+    `<path d="m16 16-2-2"/>`,
+  ].join(""),
+  "acai-e-sorvetes": [
+    `<path d="m7 11 4.08 10.35a1 1 0 0 0 1.84 0L17 11"/>`,
+    `<path d="M17 7A5 5 0 0 0 7 7"/>`,
+    `<path d="M11 3a3 3 0 0 0 0 4h2a3 3 0 0 0 0-4"/>`,
+  ].join(""),
+  "saude-e-beleza": [
     `<circle cx="6" cy="6" r="3"/>`,
     `<circle cx="6" cy="18" r="3"/>`,
     `<line x1="20" x2="8.12" y1="4" y2="15.88"/>`,
     `<line x1="14.47" x2="20" y1="14.48" y2="20"/>`,
     `<line x1="8.12" x2="12" y1="8.12" y2="12"/>`,
   ].join(""),
-  // ShoppingBag — comércio em geral
-  "comercio-em-geral": [
-    `<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>`,
-    `<line x1="3" x2="21" y1="6" y2="6"/>`,
-    `<path d="M16 10a4 4 0 0 1-8 0"/>`,
-  ].join(""),
-  // Shirt — moda e vestuário
-  "moda-e-vestuario": [
+  "roupas-e-acessorios": [
     `<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/>`,
   ].join(""),
-  // Scissors — beleza e estética
-  "beleza-e-estetica": [
-    `<circle cx="6" cy="6" r="3"/>`,
-    `<circle cx="6" cy="18" r="3"/>`,
-    `<line x1="20" x2="8.12" y1="4" y2="15.88"/>`,
-    `<line x1="14.47" x2="20" y1="14.48" y2="20"/>`,
-    `<line x1="8.12" x2="12" y1="8.12" y2="12"/>`,
+  "cosmeticos-e-perfumaria": [
+    `<path d="M12 22c4.97 0 9-2.69 9-6s-4.03-6-9-6-9 2.69-9 6 4.03 6 9 6z"/>`,
+    `<path d="M12 10v-3"/>`,
+    `<path d="m9 3 3-1 3 1"/>`,
   ].join(""),
-  // Hammer — construção e agro
-  "construcao-e-agro": [
+  "materiais-de-construcao": [
     `<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/>`,
     `<path d="m18 15 4-4"/>`,
     `<path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>`,
   ].join(""),
-  // MapPin — default
+  "eletronicos": [
+    `<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/>`,
+    `<path d="M12 18h.01"/>`,
+  ].join(""),
+  "farmacia": [
+    `<path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>`,
+    `<path d="m8.5 8.5 7 7"/>`,
+  ].join(""),
+  "posto-de-combustivel": [
+    `<path d="M3 22V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v15"/>`,
+    `<path d="M17 12h1a2 2 0 0 1 2 2v3a1 1 0 0 0 1 1 1 1 0 0 0 1-1V9.83a2 2 0 0 0-.59-1.42L19 6"/>`,
+    `<path d="M3 22h14"/>`,
+    `<path d="M7 14v-4"/>`,
+  ].join(""),
+  "transporte": [
+    `<path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/>`,
+    `<rect width="13" height="8" x="9" y="11" rx="2"/>`,
+    `<circle cx="11" cy="19" r="2"/>`,
+    `<circle cx="20" cy="19" r="2"/>`,
+  ].join(""),
+  "academia": [
+    `<path d="M6.5 6.5h11"/>`,
+    `<path d="M6.5 17.5h11"/>`,
+    `<path d="M3 12h18"/>`,
+    `<path d="M3 10v4"/>`,
+    `<path d="M21 10v4"/>`,
+    `<path d="M6 8v8"/>`,
+    `<path d="M18 8v8"/>`,
+  ].join(""),
+  "servicos": [
+    `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`,
+  ].join(""),
   default: [
     `<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>`,
     `<circle cx="12" cy="10" r="3"/>`,
   ].join(""),
 }
-
-export const CATEGORY_CONFIG = _CATEGORY_CONFIG
-export const getCategoryConfig = _getCategoryConfig
-
-export const FEATURED_COLOR = "#eab308"
-export const FEATURED_COLOR_DARK = "#ca8a04"
 
 function makeSvg(paths: string, size: number): string {
   return (
@@ -72,18 +96,16 @@ function makeSvg(paths: string, size: number): string {
   )
 }
 
-// Ícones sem label são cacheados por categoria+featured
-const iconCache = new Map<string, L.DivIcon>()
+export interface PinStyle {
+  html: string
+  width: number
+  height: number
+  anchorX: number
+  anchorY: number
+}
 
-export function createBusinessIcon(pin: BusinessMapPin, showLabel = false): L.DivIcon {
+export function buildPinHtml(pin: BusinessMapPin, showLabel = false): PinStyle {
   const categorySlug = pin.category?.slug ?? "default"
-  const cacheKey = showLabel ? null : `${categorySlug}-${pin.featured}`
-
-  if (cacheKey) {
-    const cached = iconCache.get(cacheKey)
-    if (cached) return cached
-  }
-
   const featured = pin.featured
   const cfg = getCategoryConfig(categorySlug)
   const size = featured ? 52 : 40
@@ -133,14 +155,5 @@ export function createBusinessIcon(pin: BusinessMapPin, showLabel = false): L.Di
     </div>
   `.trim()
 
-  const icon = L.divIcon({
-    html,
-    className: "",
-    iconSize: [size, size + 8],
-    iconAnchor: [size / 2, size + 8],
-    popupAnchor: [0, -(size + 8)],
-  })
-
-  if (cacheKey) iconCache.set(cacheKey, icon)
-  return icon
+  return { html, width: size, height: size + 8, anchorX: size / 2, anchorY: size + 8 }
 }

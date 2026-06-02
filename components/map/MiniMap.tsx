@@ -2,8 +2,20 @@
 // ATENÇÃO: importar apenas via dynamic() com ssr: false
 "use client"
 
-import { useEffect, useRef } from "react"
-import L from "leaflet"
+import { Map, AdvancedMarker, APIProvider } from "@vis.gl/react-google-maps"
+
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""
+
+const DARK_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#0c1b2e" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0c1b2e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8ab4f8" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a3a5c" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7aa8d8" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#071728" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
+]
 
 interface Props {
   lat: number
@@ -12,45 +24,31 @@ interface Props {
 }
 
 export function MiniMap({ lat, lng, name }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
+  const center = { lat, lng }
 
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
-
-    const map = L.map(containerRef.current, {
-      center: [lat, lng],
-      zoom: 15,
-      zoomControl: false,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      touchZoom: false,
-    })
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(map)
-
-    const icon = L.divIcon({
-      html: `<div style="width:14px;height:14px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(59,130,246,0.6)"></div>`,
-      className: "",
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-    })
-
-    L.marker([lat, lng], { icon })
-      .addTo(map)
-      .bindPopup(name)
-
-    mapRef.current = map
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-    }
-  }, [lat, lng, name])
-
-  return <div ref={containerRef} className="w-full h-full" />
+  return (
+    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
+      <Map
+        mapId="empreende-general-minimap"
+        center={center}
+        zoom={15}
+        disableDefaultUI
+        gestureHandling="none"
+        keyboardShortcuts={false}
+        styles={DARK_STYLE}
+        style={{ width: "100%", height: "100%" }}
+      >
+        <AdvancedMarker position={center} title={name}>
+          <div style={{
+            width: 16,
+            height: 16,
+            background: "#3b82f6",
+            border: "3px solid white",
+            borderRadius: "50%",
+            boxShadow: "0 2px 8px rgba(59,130,246,0.6)",
+          }} />
+        </AdvancedMarker>
+      </Map>
+    </APIProvider>
+  )
 }
