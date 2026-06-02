@@ -18,7 +18,11 @@ function getAdminApp(): App {
       projectId: process.env.FIREBASE_PROJECT_ID!,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
       // Substituir \n escapado por quebra de linha real
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      // Normaliza \n escapados E CRLF (Windows) para LF puro — obrigatório no formato PEM
+      privateKey: process.env.FIREBASE_PRIVATE_KEY
+        ?.replace(/\\n/g, "\n")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n"),
     }),
   })
 
