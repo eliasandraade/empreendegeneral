@@ -1,6 +1,6 @@
-// lib/session.ts — Leitura de sessão via cookie (Server Components)
+// lib/session.ts — Sessão via JWT cookie (sem Firebase)
 import { cookies } from "next/headers"
-import { adminAuth } from "@/lib/firebase-admin"
+import { jwtVerify, SignJWT } from "jose"
 import { prisma } from "@/lib/prisma"
 import { SESSION_COOKIE } from "@/lib/constants"
 import type { UserRole } from "@prisma/client"
@@ -13,21 +13,32 @@ export interface SessionUser {
   role: UserRole
 }
 
-/**
- * Retorna o usuário autenticado a partir do cookie de sessão Firebase.
- * Retorna null se não autenticado ou token inválido.
- */
+function getSecret() {
+  const secret = process.env.SESSION_SECRET
+  if (!secret) throw new Error("SESSION_SECRET não configurado")
+  return new TextEncoder().encode(secret)
+}
+
+export async function createSessionToken(userId: string): Promise<string> {
+  return new SignJWT({ sub: userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("5d")
+    .setIssuedAt()
+    .sign(getSecret())
+}
+
 export async function getServerSession(): Promise<SessionUser | null> {
   try {
     const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get(SESSION_COOKIE)?.value
-    if (!sessionCookie) return null
+    const token = cookieStore.get(SESSION_COOKIE)?.value
+    if (!token) return null
 
-    // Verifica e decodifica o cookie de sessão Firebase
-    const decoded = await adminAuth.verifySessionCookie(sessionCookie, true)
+    const { payload } = await jwtVerify(token, getSecret())
+    const userId = payload.sub as string
+    if (!userId) return null
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: decoded.uid },
+      where: { id: userId },
       select: { id: true, name: true, email: true, image: true, role: true },
     })
 

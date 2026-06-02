@@ -1,76 +1,74 @@
-// app/api/auth/session/route.ts — Criar e encerrar sessão Firebase
+// app/api/auth/session/route.ts — Login email/senha + logout
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { adminAuth } from "@/lib/firebase-admin"
 import { prisma } from "@/lib/prisma"
+import { createSessionToken } from "@/lib/session"
+import { SESSION_COOKIE } from "@/lib/constants"
+import bcrypt from "bcryptjs"
 import type { UserRole } from "@prisma/client"
 
-const SESSION_COOKIE = "__session"
-const SESSION_DURATION = 60 * 60 * 24 * 5 * 1000 // 5 dias em ms
+const SESSION_MAX_AGE = 60 * 60 * 24 * 5 // 5 dias em segundos
 
-// POST /api/auth/session — recebe idToken, cria sessão e seta cookie
+// POST /api/auth/session — login com email/senha
 export async function POST(request: NextRequest) {
   try {
-    const { idToken } = await request.json()
-    if (!idToken) {
-      return NextResponse.json({ error: "idToken obrigatório" }, { status: 400 })
+    const { email, password } = await request.json()
+
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email e senha obrigatórios" }, { status: 400 })
     }
 
-    // Verifica o ID token e cria cookie de sessão de longa duração
-    const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-      expiresIn: SESSION_DURATION,
-    })
+    // Verifica credenciais de admin via variável de ambiente
+    const adminEmail = process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase())
+    const adminPassword = process.env.ADMIN_PASSWORD
 
-    // Decodifica para obter dados do usuário Firebase
-    const decoded = await adminAuth.verifyIdToken(idToken)
-    const { uid, email, name, picture } = decoded
+    const isAdminEmail = adminEmail?.includes(email.toLowerCase())
 
-    // Busca lista de admins no env
-    const adminEmails = (process.env.ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
+    if (!isAdminEmail || !adminPassword) {
+      return NextResponse.json({ error: "Credenciais inválidas" }, { status: 401 })
+    }
 
-    // Upsert do usuário no banco de dados
-    const isAdmin = email ? adminEmails.includes(email.toLowerCase()) : false
+    // Compara senha com hash armazenado (ou plain text em desenvolvimento)
+    const passwordMatch = adminPassword.startsWith("$2")
+      ? await bcrypt.compare(password, adminPassword)
+      : password === adminPassword
 
+    if (!passwordMatch) {
+      return NextResponse.json({ error: "Credenciais inválidas" }, { status: 401 })
+    }
+
+    // Upsert do admin no banco
     const user = await prisma.user.upsert({
-      where: { firebaseUid: uid },
-      update: {
-        name: name ?? undefined,
-        email: email ?? undefined,
-        image: picture ?? undefined,
-        // Promove para SUPER_ADMIN se email estiver na lista e ainda não for admin
-        ...(isAdmin && { role: "SUPER_ADMIN" as UserRole }),
-      },
+      where: { email: email.toLowerCase() },
+      update: { role: "SUPER_ADMIN" as UserRole },
       create: {
-        firebaseUid: uid,
-        name: name ?? null,
-        email: email ?? null,
-        image: picture ?? null,
-        role: (isAdmin ? "SUPER_ADMIN" : "USER") as UserRole,
+        email: email.toLowerCase(),
+        name: "Admin",
+        role: "SUPER_ADMIN" as UserRole,
       },
+      select: { id: true, role: true },
     })
 
-    // Seta cookie HTTP-only seguro
+    // Cria token JWT e seta cookie HTTP-only
+    const token = await createSessionToken(user.id)
     const cookieStore = await cookies()
-    cookieStore.set(SESSION_COOKIE, sessionCookie, {
+    cookieStore.set(SESSION_COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: SESSION_DURATION / 1000, // em segundos
+      maxAge: SESSION_MAX_AGE,
       path: "/",
     })
 
     return NextResponse.json({ ok: true, role: user.role })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
-    console.error("Erro ao criar sessão:", msg)
-    return NextResponse.json({ error: "Falha na autenticação", detail: msg }, { status: 401 })
+    console.error("Erro no login:", msg)
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 })
   }
 }
 
-// DELETE /api/auth/session — encerra sessão (logout)
+// DELETE /api/auth/session — logout
 export async function DELETE() {
   const cookieStore = await cookies()
   cookieStore.delete(SESSION_COOKIE)
