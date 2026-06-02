@@ -13,9 +13,9 @@ const DEFAULT_CENTER = { lat: -3.754, lng: -39.453 }
 const DEFAULT_ZOOM = 14
 const LABEL_ZOOM_THRESHOLD = 15
 
-// Remove todos os POIs do Google Maps — apenas base cartográfica + nossos pins
-// Funciona somente sem mapId (vector maps ignoram styles)
-const CLEAN_STYLE: google.maps.MapTypeStyle[] = [
+// Estilos plain — sem referência a google.maps no nível do módulo
+// (google só existe após o APIProvider carregar o script)
+const CLEAN_STYLE = [
   { featureType: "poi", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
 ]
@@ -31,50 +31,54 @@ interface Props {
   onZoomChange: (zoom: number) => void
 }
 
-// OverlayView customizado para renderizar HTML puro sem precisar de mapId
-class HtmlOverlay extends google.maps.OverlayView {
-  private div: HTMLDivElement | null = null
+// Tipo opaco para os overlays — evita referenciar google.maps no nível do módulo
+type AnyOverlay = {
+  setMap(map: google.maps.Map | null): void
+  updateHtml(html: string): void
+}
 
-  constructor(
-    private position: google.maps.LatLng,
-    private html: string,
-    private anchorX: number,
-    private anchorY: number,
-    private onClick: () => void
-  ) {
-    super()
-  }
+// Factory: cria o overlay apenas quando google já está disponível (dentro de useEffect)
+function createHtmlOverlay(
+  position: google.maps.LatLng,
+  html: string,
+  anchorX: number,
+  anchorY: number,
+  onClick: () => void
+): AnyOverlay {
+  class HtmlOverlay extends google.maps.OverlayView {
+    private div: HTMLDivElement | null = null
 
-  onAdd() {
-    this.div = document.createElement("div")
-    this.div.style.position = "absolute"
-    this.div.style.cursor = "pointer"
-    this.div.innerHTML = this.html
-    this.div.addEventListener("click", (e) => {
-      e.stopPropagation()
-      this.onClick()
-    })
-    this.getPanes()!.overlayMouseTarget.appendChild(this.div)
-  }
-
-  draw() {
-    if (!this.div) return
-    const point = this.getProjection().fromLatLngToDivPixel(this.position)
-    if (!point) return
-    this.div.style.left = `${point.x - this.anchorX}px`
-    this.div.style.top = `${point.y - this.anchorY}px`
-  }
-
-  onRemove() {
-    if (this.div?.parentNode) {
-      this.div.parentNode.removeChild(this.div)
+    onAdd() {
+      this.div = document.createElement("div")
+      this.div.style.position = "absolute"
+      this.div.style.cursor = "pointer"
+      this.div.innerHTML = html
+      this.div.addEventListener("click", (e) => {
+        e.stopPropagation()
+        onClick()
+      })
+      this.getPanes()!.overlayMouseTarget.appendChild(this.div)
     }
-    this.div = null
+
+    draw() {
+      if (!this.div) return
+      const point = this.getProjection().fromLatLngToDivPixel(position)
+      if (!point) return
+      this.div.style.left = `${point.x - anchorX}px`
+      this.div.style.top = `${point.y - anchorY}px`
+    }
+
+    onRemove() {
+      if (this.div?.parentNode) this.div.parentNode.removeChild(this.div)
+      this.div = null
+    }
+
+    updateHtml(newHtml: string) {
+      if (this.div) this.div.innerHTML = newHtml
+    }
   }
 
-  updateHtml(html: string) {
-    if (this.div) this.div.innerHTML = html
-  }
+  return new HtmlOverlay()
 }
 
 function MapInner({
@@ -88,8 +92,8 @@ function MapInner({
   onZoomChange,
 }: Props) {
   const map = useMap()
-  const overlaysRef = useRef<Map<string, HtmlOverlay>>(new globalThis.Map())
-  const userOverlayRef = useRef<HtmlOverlay | null>(null)
+  const overlaysRef = useRef<globalThis.Map<string, AnyOverlay>>(new globalThis.Map())
+  const userOverlayRef = useRef<AnyOverlay | null>(null)
 
   const filtered = businesses.filter((b) => {
     if (categoryFilter && b.category?.slug !== categoryFilter) return false
@@ -139,17 +143,13 @@ function MapInner({
       if (overlaysRef.current.has(pin.id)) {
         overlaysRef.current.get(pin.id)!.updateHtml(html)
       } else {
-        const overlay = new HtmlOverlay(latlng, html, anchorX, anchorY, () =>
+        const overlay = createHtmlOverlay(latlng, html, anchorX, anchorY, () =>
           onSelectBusiness(selectedId === pin.id ? null : pin)
         )
-        overlay.setMap(map)
+        ;(overlay as unknown as google.maps.OverlayView).setMap(map)
         overlaysRef.current.set(pin.id, overlay)
       }
     })
-
-    return () => {
-      // Limpa ao desmontar
-    }
   }, [map, filtered, showLabel, selectedId, onSelectBusiness])
 
   // Limpa todos os overlays ao desmontar o componente
@@ -170,22 +170,13 @@ function MapInner({
 
     if (!userLocation) return
 
-    const html = `<div style="
-      width:20px;height:20px;
-      background:#3b82f6;
-      border:3px solid white;
-      border-radius:50%;
-      box-shadow:0 0 0 6px rgba(59,130,246,0.25);
-    "></div>`
-
+    const html = `<div style="width:20px;height:20px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 0 0 6px rgba(59,130,246,0.25);"></div>`
     const latlng = new google.maps.LatLng(userLocation.lat, userLocation.lng)
-    const overlay = new HtmlOverlay(latlng, html, 10, 10, () => {})
-    overlay.setMap(map)
+    const overlay = createHtmlOverlay(latlng, html, 10, 10, () => {})
+    ;(overlay as unknown as google.maps.OverlayView).setMap(map)
     userOverlayRef.current = overlay
 
-    return () => {
-      overlay.setMap(null)
-    }
+    return () => overlay.setMap(null)
   }, [map, userLocation])
 
   return null
