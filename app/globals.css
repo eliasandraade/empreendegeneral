@@ -97,3 +97,22 @@
   0%, 100% { opacity: 0.3; transform: scale(1); }
   50% { opacity: 0.6; transform: scale(1.08); }
 }
+
+/* Animações de fade-in com slide para landing page */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out both;
+}
+.animate-fade-in-delay-1 {
+  animation: fadeIn 0.6s ease-out 0.15s both;
+}
+.animate-fade-in-delay-2 {
+  animation: fadeIn 0.6s ease-out 0.3s both;
+}
+.animate-fade-in-delay-3 {
+  animation: fadeIn 0.6s ease-out 0.45s both;
+}
