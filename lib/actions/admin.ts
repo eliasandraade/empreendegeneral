@@ -81,3 +81,21 @@ export async function rejectBusinessAction(businessId: string, reason: string): 
 
   return { success: true, data: undefined }
 }
+
+export async function toggleFeaturedAction(businessId: string, featured: boolean): Promise<ActionResult<undefined>> {
+  const session = await getServerSession()
+  if (!session?.id || !isAdminRole(session.role)) {
+    return { success: false, error: "Acesso negado." }
+  }
+
+  await prisma.business.update({
+    where: { id: businessId },
+    data: { featured },
+  })
+
+  revalidatePath("/admin/featured")
+  revalidatePath("/")
+  revalidatePath("/mapa")
+
+  return { success: true, data: undefined }
+}
