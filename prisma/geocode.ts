@@ -42,11 +42,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const FORCE = process.argv.includes("--force")
+
 async function main() {
   console.log("🗺️  Geocodificação em lote — Empreende General\n")
+  if (FORCE) console.log("⚠️  Modo --force: re-geocodificando todos\n")
 
   const businesses = await prisma.business.findMany({
-    where: { latitude: null },
+    where: FORCE ? {} : { latitude: null },
     select: { id: true, name: true, address: true },
   })
 
