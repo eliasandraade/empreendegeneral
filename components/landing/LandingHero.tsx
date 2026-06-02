@@ -22,8 +22,7 @@ export function LandingHero({ appName, slogan, description, credit }: LandingHer
       <div className="flex items-center gap-3 mb-4 animate-fade-in">
         <MapPin className="w-10 h-10 text-white drop-shadow-lg" strokeWidth={1.5} />
         <h1 className="text-4xl md:text-5xl tracking-tight text-white">
-          <span className="font-light">Empreende </span>
-          <span className="font-bold">General</span>
+          {appName}
         </h1>
       </div>
 
