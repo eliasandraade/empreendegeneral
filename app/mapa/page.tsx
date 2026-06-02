@@ -51,13 +51,13 @@ export default async function MapaPage() {
   const pins = businesses as unknown as BusinessMapPin[]
 
   return (
-    <div style={{ width: "100dvw", height: "100dvh", position: "relative", overflow: "hidden" }}>
+    <div className="w-screen h-screen relative overflow-hidden">
       <MapCanvas
         businesses={pins}
         categories={categories}
         isAuthenticated={!!session}
         appName={APP_CONFIG.name}
-        slogan={process.env.NEXT_PUBLIC_SLOGAN ?? ""}
+        slogan={APP_CONFIG.slogan}
       />
     </div>
   )
