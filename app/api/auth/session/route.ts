@@ -64,8 +64,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, role: user.role })
   } catch (error) {
-    console.error("Erro ao criar sessão:", error)
-    return NextResponse.json({ error: "Falha na autenticação" }, { status: 401 })
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error("Erro ao criar sessão:", msg)
+    return NextResponse.json({ error: "Falha na autenticação", detail: msg }, { status: 401 })
   }
 }
 
